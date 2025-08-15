@@ -1,5 +1,8 @@
 # ReadVideo
 
+[![PyPI version](https://badge.fury.io/py/readvideo.svg)](https://badge.fury.io/py/readvideo)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
 A modern Python-based video and audio transcription tool that extracts and transcribes content from YouTube, Bilibili, and local media files. This project is a complete rewrite of the original bash script with improved modularity, performance, and user experience.
 
 ## 🚀 Features
@@ -28,13 +31,29 @@ A modern Python-based video and audio transcription tool that extracts and trans
 - yt-dlp (Python package, included)
 - BBDown (optional, for Bilibili support)
 
-### Install with uv
+### Install from PyPI
+
+#### Option 1: Install as a global tool (Recommended)
 ```bash
-# Install dependencies
+# Using uv (recommended - fast and isolated)
+uv tool install readvideo
+
+# Using pipx (alternative tool installer)
+pipx install readvideo
+
+# Using pip globally
+pip install readvideo
+```
+
+#### Option 2: Development Installation
+```bash
+# Clone and install for development
+git clone https://github.com/learnerLj/readvideo.git
+cd readvideo
 uv sync
 
-# Or install the package directly
-uv pip install -e .
+# Or with pip
+pip install -e .
 ```
 
 ### System Dependencies

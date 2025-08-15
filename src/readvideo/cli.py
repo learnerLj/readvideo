@@ -286,7 +286,7 @@ def info():
         console.print(f"  {example}", style="dim")
     
     console.print("\n📖 More information:", style="bold")
-    console.print("  GitHub: https://github.com/your-repo/readvideo", style="dim")
+    console.print("  GitHub: https://github.com/learnerLj/readvideo", style="dim")
 
 
 if __name__ == '__main__':
