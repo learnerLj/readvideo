@@ -84,7 +84,8 @@ class YouTubeTranscriptFetcher:
             Video ID or None if not found
         """
         patterns = [
-            r"(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})",
+            r"(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)"
+            r"([a-zA-Z0-9_-]{11})",
             r"youtube\.com\/.*[?&]v=([a-zA-Z0-9_-]{11})",
         ]
 
@@ -172,7 +173,8 @@ class YouTubeTranscriptFetcher:
         wait=wait_fixed(1),
         retry=retry_if_exception_type(RetryableTranscriptError),
         before_sleep=lambda retry_state: console.print(
-            f"🔄 Attempt {retry_state.attempt_number + 1} to get subtitles... (access restricted)",
+            f"🔄 Attempt {retry_state.attempt_number + 1} to get subtitles... "
+            "(access restricted)",
             style="yellow",
         ),
     )

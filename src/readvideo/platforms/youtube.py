@@ -1,8 +1,8 @@
 """YouTube platform handler with transcript priority."""
 
 import os
-import subprocess
 from pathlib import Path
+import subprocess
 from typing import Any, Dict, Optional
 
 from rich.console import Console

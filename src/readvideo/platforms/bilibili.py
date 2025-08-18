@@ -1,9 +1,9 @@
 """Bilibili platform handler."""
 
 import os
+from pathlib import Path
 import re
 import subprocess
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from rich.console import Console

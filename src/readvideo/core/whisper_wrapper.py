@@ -1,9 +1,9 @@
 """Wrapper for whisper-cli command line tool."""
 
 import os
+from pathlib import Path
 import shutil
 import subprocess
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from rich.console import Console
@@ -112,10 +112,10 @@ class WhisperWrapper:
         try:
             # Run whisper-cli with appropriate output control
             if silent:
-                # Silent mode: capture all output to avoid cluttering console during batch
+                # Silent mode: capture all output to avoid cluttering during batch
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
             else:
-                # Single video mode: allow normal output for user to see progress and results
+                # Single video mode: allow normal output for user to see progress
                 subprocess.run(cmd, check=True, text=True)
 
             # Find output text file
