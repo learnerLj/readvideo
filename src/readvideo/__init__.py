@@ -8,6 +8,6 @@ __version__ = "0.1.0"
 __author__ = "Jiahao Luo"
 __email__ = "luoshitou9@gmail.com"
 
-from .cli import main
-
-__all__ = ["main"]
+# Don't import CLI module during package initialization to avoid 
+# "found in sys.modules" warning when running as module
+__all__ = []
