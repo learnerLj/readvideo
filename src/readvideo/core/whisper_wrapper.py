@@ -55,7 +55,8 @@ class WhisperWrapper:
         audio_file: str, 
         language: Optional[str] = "zh",
         auto_detect: bool = False,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        silent: bool = False
     ) -> Dict[str, Any]:
         """Transcribe audio file using whisper-cli.
         
@@ -64,6 +65,7 @@ class WhisperWrapper:
             language: Language code (e.g., 'zh', 'en') or None for auto-detect
             auto_detect: Whether to use auto language detection
             output_dir: Directory to save output files (default: same as input)
+            silent: Whether to suppress detailed output (for batch processing)
             
         Returns:
             Dict containing transcription results and metadata
@@ -90,16 +92,22 @@ class WhisperWrapper:
         
         cmd.append(audio_file)
         
-        console.print(f"🎙️ Transcribing audio...", style="cyan")
-        if auto_detect:
-            console.print("🔍 Using automatic language detection...", style="yellow")
-        else:
-            lang_name = {"zh": "Chinese", "en": "English"}.get(language, language)
-            console.print(f"🌍 Using {lang_name} language recognition...", style="yellow")
+        if not silent:
+            console.print(f"🎙️ Transcribing audio...", style="cyan")
+            if auto_detect:
+                console.print("🔍 Using automatic language detection...", style="yellow")
+            else:
+                lang_name = {"zh": "Chinese", "en": "English"}.get(language, language)
+                console.print(f"🌍 Using {lang_name} language recognition...", style="yellow")
         
         try:
-            # Run whisper-cli with real-time output
-            result = subprocess.run(cmd, check=True)
+            # Run whisper-cli with appropriate output control
+            if silent:
+                # Silent mode: capture all output to avoid cluttering console during batch processing
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            else:
+                # Single video mode: allow normal output for user to see progress and results
+                result = subprocess.run(cmd, check=True)
             
             # Find output text file
             output_txt_file = self._find_output_file(audio_file, output_dir)

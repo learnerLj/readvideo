@@ -12,3 +12,5 @@ wheels/
 
 # Python version files
 .python-version
+*_output/
+*_output

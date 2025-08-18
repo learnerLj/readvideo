@@ -82,7 +82,8 @@ class BilibiliHandler:
         url: str, 
         auto_detect: bool = False,
         output_dir: Optional[str] = None,
-        cleanup: bool = True
+        cleanup: bool = True,
+        silent: bool = False
     ) -> Dict[str, Any]:
         """Process Bilibili video by downloading and transcribing audio.
         
@@ -91,6 +92,7 @@ class BilibiliHandler:
             auto_detect: Whether to use auto language detection for whisper
             output_dir: Output directory for files
             cleanup: Whether to clean up temporary files
+            silent: Whether to suppress detailed output (for batch processing)
             
         Returns:
             Dict containing processing results
@@ -125,7 +127,8 @@ class BilibiliHandler:
                 wav_file, 
                 language=language, 
                 auto_detect=auto_detect,
-                output_dir=output_dir
+                output_dir=output_dir,
+                silent=silent
             )
             
             # Extract BV ID for naming

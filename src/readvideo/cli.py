@@ -14,6 +14,8 @@ from .platforms.youtube import YouTubeHandler
 from .platforms.bilibili import BilibiliHandler
 from .platforms.local import LocalMediaHandler
 from .core.transcript_fetcher import is_youtube_url
+from .user_content.bilibili_user import BilibiliUserHandler
+from .user_content.utils import validate_date_format
 
 console = Console()
 
@@ -289,5 +291,145 @@ def info():
     console.print("  GitHub: https://github.com/learnerLj/readvideo", style="dim")
 
 
+# Create CLI group for multiple commands
+@click.group()
+def cli():
+    """ReadVideo - Video and Audio Transcription Tool"""
+    pass
+
+
+# Add single video processing as 'process' command
+@cli.command('process')
+@click.argument('input_source', required=True)
+@click.option('--auto-detect', is_flag=True, help='Enable automatic language detection (default: Chinese)')
+@click.option('--output-dir', '-o', type=click.Path(), help='Output directory (default: current directory or input file directory)')
+@click.option('--no-cleanup', is_flag=True, help='Do not clean up temporary files')
+@click.option('--info-only', is_flag=True, help='Show input information only, do not process')
+@click.option('--whisper-model', default="~/.whisper-models/ggml-large-v3.bin", help='Path to Whisper model file')
+@click.option('--verbose', '-v', is_flag=True, help='Verbose output')
+@click.option('--proxy', help='HTTP proxy address (e.g., http://127.0.0.1:8080)')
+def process_single(input_source, auto_detect, output_dir, no_cleanup, info_only, whisper_model, verbose, proxy):
+    """Process single video, audio file or URL."""
+    # Call main function directly with correct arguments
+    import sys
+    
+    # Save original argv and replace it temporarily
+    original_argv = sys.argv
+    sys.argv = [
+        'readvideo',
+        input_source,
+        *(['--auto-detect'] if auto_detect else []),
+        *(['-o', output_dir] if output_dir else []),
+        *(['--no-cleanup'] if no_cleanup else []),
+        *(['--info-only'] if info_only else []),
+        *(['--whisper-model', whisper_model] if whisper_model != "~/.whisper-models/ggml-large-v3.bin" else []),
+        *(['-v'] if verbose else []),
+        *(['--proxy', proxy] if proxy else [])
+    ]
+    
+    try:
+        main()
+    finally:
+        sys.argv = original_argv
+
+
+# Add user processing command
+@cli.command('user')
+@click.argument('user_input', required=True)
+@click.option('--output-dir', '-o', required=True, type=click.Path(), help='Output directory (required for user processing)')
+@click.option('--start-date', help='Start date for video filtering (YYYY-MM-DD format)')
+@click.option('--max-videos', type=int, help='Maximum number of videos to process')
+@click.option('--whisper-model', default="~/.whisper-models/ggml-large-v3.bin", help='Path to Whisper model file')
+@click.option('--verbose', '-v', is_flag=True, help='Verbose output')
+def user_command(user_input, output_dir, start_date, max_videos, whisper_model, verbose):
+    """Process all videos from a Bilibili user.
+    
+    USER_INPUT: Bilibili user UID or space URL
+    
+    Examples:
+      readvideo user 123456 --output-dir ./user_analysis
+      readvideo user https://space.bilibili.com/123456 -o ./output
+      readvideo user 123456 -o ./output --start-date 2024-01-01 --max-videos 50
+    """
+    if not verbose:
+        print_banner()
+    
+    # Validate start date format if provided
+    if start_date and not validate_date_format(start_date):
+        console.print(f"❌ Invalid date format: {start_date}. Use YYYY-MM-DD format.", style="red")
+        sys.exit(1)
+    
+    # Validate max_videos
+    if max_videos is not None and max_videos <= 0:
+        console.print(f"❌ max-videos must be a positive integer", style="red")
+        sys.exit(1)
+    
+    try:
+        # Initialize user handler
+        user_handler = BilibiliUserHandler(whisper_model)
+        
+        console.print(f"🎯 Starting user processing...", style="bold cyan")
+        if start_date:
+            console.print(f"📅 Date filter: videos from {start_date}", style="dim")
+        if max_videos:
+            console.print(f"🔢 Video limit: {max_videos} videos", style="dim")
+        
+        # Process user
+        result = user_handler.process_user(
+            user_input=user_input,
+            output_dir=output_dir,
+            start_date=start_date,
+            max_videos=max_videos
+        )
+        
+        if result.get('success', False):
+            show_user_results(result, verbose)
+        else:
+            console.print(f"❌ User processing failed: {result.get('error', 'Unknown error')}", style="red")
+            sys.exit(1)
+            
+    except KeyboardInterrupt:
+        console.print("\n⚠️ Operation interrupted by user", style="yellow")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"❌ User processing failed: {e}", style="red")
+        if verbose:
+            import traceback
+            console.print(traceback.format_exc(), style="dim")
+        sys.exit(1)
+
+
+def show_user_results(result: dict, verbose: bool):
+    """Show user processing results."""
+    console.print("\n🎉 User processing completed!", style="bold green")
+    
+    # Create results table
+    table = Table(show_header=False, box=None)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="white")
+    
+    user_info = result.get('user_info', {})
+    stats = result.get('processing_stats', {})
+    
+    table.add_row("User", f"{user_info.get('name', 'Unknown')} (UID: {user_info.get('uid', 'N/A')})")
+    table.add_row("Followers", f"{user_info.get('follower', 0):,}")
+    table.add_row("Total Videos", str(stats.get('total_videos', 0)))
+    table.add_row("Processed", str(stats.get('processed_videos', 0)))
+    table.add_row("Failed", str(stats.get('failed_videos', 0)))
+    table.add_row("Success Rate", f"{stats.get('success_rate', 0):.1%}")
+    
+    console.print(table)
+    
+    if verbose and result.get('results'):
+        console.print(f"\n📋 Processing details:", style="bold")
+        for i, video_result in enumerate(result['results'][:5]):  # Show first 5
+            video_info = video_result.get('video_info', {})
+            status = "✅" if video_result.get('success', False) else "❌"
+            console.print(f"  {status} {video_info.get('title', 'Unknown')}", style="dim")
+        
+        if len(result['results']) > 5:
+            console.print(f"  ... and {len(result['results']) - 5} more videos", style="dim")
+
+
 if __name__ == '__main__':
-    main()
+    cli()
