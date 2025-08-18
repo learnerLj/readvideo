@@ -1,15 +1,14 @@
 """Bilibili user content processing handler."""
 
+from datetime import datetime
 import json
 import os
 import re
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import bilibili_api
 from rich.console import Console
 from rich.progress import Progress
-
-import bilibili_api
 
 from ..platforms.bilibili import BilibiliHandler
 
@@ -102,13 +101,21 @@ class BilibiliUserHandler:
 
             # Parse start date if provided
             start_timestamp = None
+            end_timestamp = None
             if start_date:
                 try:
-                    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-                    start_timestamp = int(start_dt.timestamp())
-                except ValueError:
+                    from .utils import parse_date_to_timestamp_range
+
+                    start_timestamp, end_timestamp = parse_date_to_timestamp_range(
+                        start_date
+                    )
                     console.print(
-                        f"⚠️ Invalid date format: {start_date}, ignoring date filter",
+                        f"📅 Date filter: videos from {start_date} (inclusive)",
+                        style="dim",
+                    )
+                except ValueError as e:
+                    console.print(
+                        f"⚠️ {e}, ignoring date filter",
                         style="yellow",
                     )
 
@@ -123,11 +130,11 @@ class BilibiliUserHandler:
 
                     # Filter by date if specified
                     for video in videos:
-                        if (
-                            start_timestamp
-                            and video.get("created", 0) < start_timestamp
-                        ):
-                            continue
+                        if start_timestamp:
+                            video_created = video.get("created", 0)
+                            # Video must be created on or after the start date
+                            if video_created < start_timestamp:
+                                continue
 
                         # Add formatted date and URL
                         video["created_date"] = datetime.fromtimestamp(
@@ -151,6 +158,7 @@ class BilibiliUserHandler:
                         and videos
                         and videos[-1].get("created", 0) < start_timestamp
                     ):
+                        # All remaining videos will be older than start_date
                         break
                     if max_videos and len(all_videos) >= max_videos:
                         break
@@ -443,7 +451,8 @@ class BilibiliUserHandler:
             console.print("\n🎉 Processing completed!", style="bold green")
             if attempted_this_run > 0:
                 console.print(
-                    f"📊 This run: {successful_this_run} successful, {failed_this_run} failed",
+                    f"📊 This run: {successful_this_run} successful, "
+                    f"{failed_this_run} failed",
                     style="cyan",
                 )
             if skipped_this_run > 0:
@@ -451,7 +460,8 @@ class BilibiliUserHandler:
                     f"⏭️ Skipped: {skipped_this_run} already processed", style="yellow"
                 )
             console.print(
-                f"📈 Overall: {len(status['completed'])} completed, {len(status['failed'])} failed",
+                f"📈 Overall: {len(status['completed'])} completed, "
+                f"{len(status['failed'])} failed",
                 style="dim",
             )
 
@@ -508,15 +518,15 @@ class BilibiliUserHandler:
                 "skipped_videos": run_stats[
                     "skipped_this_run"
                 ],  # Videos skipped in this run
-                "run_success_rate": run_success_rate,  # Success rate for attempted videos
+                "run_success_rate": run_success_rate,  # Success rate for attempted
                 "overall_completed": run_stats[
                     "total_completed"
-                ],  # Total videos completed (including previous runs)
+                ],  # Total videos completed (including previous)
                 "overall_failed": run_stats[
                     "total_failed"
-                ],  # Total videos failed (including previous runs)
-                "overall_completion_rate": overall_completion_rate,  # Overall completion percentage
-                # Legacy field for backward compatibility (based on this run's processing)
+                ],  # Total videos failed (including previous)
+                "overall_completion_rate": overall_completion_rate,  # Overall %
+                # Legacy field for backward compatibility (based on this run)
                 "success_rate": run_success_rate,
                 "generated_at": datetime.now().isoformat(),
             },

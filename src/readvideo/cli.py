@@ -14,7 +14,7 @@ from .platforms.bilibili import BilibiliHandler
 from .platforms.local import LocalMediaHandler
 from .platforms.youtube import YouTubeHandler
 from .user_content.bilibili_user import BilibiliUserHandler
-from .user_content.utils import validate_date_format
+from .user_content.utils import validate_date_with_range_check
 
 console = Console()
 
@@ -25,7 +25,7 @@ def print_banner():
 [bold cyan]ReadVideo[/bold cyan] - Video & Audio Transcription Tool
 
 Supported Platforms:
-  • [green]YouTube[/green] - Prioritize existing subtitles, fallback to audio transcription
+  • [green]YouTube[/green] - Prioritize existing subtitles, fallback to transcription
   • [blue]Bilibili[/blue] - Auto download and transcribe audio
   • [yellow]Local Files[/yellow] - Support audio and video file transcription
     """
@@ -367,7 +367,12 @@ def process_single(
     type=click.Path(),
     help="Output directory (required for user processing)",
 )
-@click.option("--start-date", help="Start date for video filtering (YYYY-MM-DD format)")
+@click.option(
+    "--start-date",
+    help="Start date for video filtering (YYYY-MM-DD format, e.g., 2024-01-15). "
+    "Videos published on or after this date will be included. "
+    "Date must be between 2005-01-01 and today.",
+)
 @click.option("--max-videos", type=int, help="Maximum number of videos to process")
 @click.option(
     "--whisper-model",
@@ -385,17 +390,23 @@ def user_command(
     Examples:
       readvideo user 123456 --output-dir ./user_analysis
       readvideo user https://space.bilibili.com/123456 -o ./output
-      readvideo user 123456 -o ./output --start-date 2024-01-01 --max-videos 50
+      readvideo user 123456 -o ./output --start-date 2024-01-15 --max-videos 50
+
+    Date filtering:
+      --start-date 2024-01-01  # Include videos from Jan 1, 2024 onwards
+      --start-date 2023-12-25  # Include videos from Dec 25, 2023 onwards
+
+    Note: Date must be in YYYY-MM-DD format and between 2005-01-01 and today.
     """
     if not verbose:
         print_banner()
 
     # Validate start date format if provided
-    if start_date and not validate_date_format(start_date):
-        console.print(
-            f"❌ Invalid date format: {start_date}. Use YYYY-MM-DD format.", style="red"
-        )
-        sys.exit(1)
+    if start_date:
+        is_valid, error_message = validate_date_with_range_check(start_date)
+        if not is_valid:
+            console.print(f"❌ {error_message}", style="red")
+            sys.exit(1)
 
     # Validate max_videos
     if max_videos is not None and max_videos <= 0:
