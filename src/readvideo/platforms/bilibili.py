@@ -77,13 +77,83 @@ class BilibiliHandler:
         
         return None
     
+    def sanitize_filename(self, filename: str, max_length: int = 50) -> str:
+        """Sanitize filename by removing invalid characters.
+        
+        Args:
+            filename: Original filename
+            max_length: Maximum length for the filename part
+            
+        Returns:
+            Sanitized filename safe for all operating systems
+        """
+        # Remove or replace invalid characters
+        # Windows reserved: < > : " | ? * \ /
+        # Also remove other problematic characters
+        invalid_chars = r'[<>:"|?*\\/]'
+        sanitized = re.sub(invalid_chars, '_', filename)
+        
+        # Remove multiple consecutive underscores/spaces
+        sanitized = re.sub(r'[_\s]+', '_', sanitized)
+        
+        # Remove leading/trailing underscores
+        sanitized = sanitized.strip('_')
+        
+        # Truncate if too long, but try to keep word boundaries
+        if len(sanitized) > max_length:
+            truncated = sanitized[:max_length]
+            # Try to end at a word boundary
+            last_underscore = truncated.rfind('_')
+            if last_underscore > max_length * 0.7:  # If underscore is in the last 30%
+                truncated = truncated[:last_underscore]
+            sanitized = truncated.rstrip('_')
+        
+        # Ensure not empty
+        return sanitized if sanitized else "video"
+    
+    def generate_filename(self, bv_id: str, video_info: Optional[Dict[str, Any]] = None) -> str:
+        """Generate filename based on video info and BV ID.
+        
+        Args:
+            bv_id: Bilibili BV ID
+            video_info: Optional video metadata with title and date
+            
+        Returns:
+            Generated filename without extension
+        """
+        if not video_info:
+            return bv_id
+        
+        # Extract date and title
+        date = video_info.get('created_date', '')
+        title = video_info.get('title', '')
+        
+        if not date or not title:
+            return bv_id
+        
+        # Sanitize title
+        safe_title = self.sanitize_filename(title)
+        
+        # Build filename: date_title_bvid
+        filename = f"{date}_{safe_title}_{bv_id}"
+        
+        # Ensure total length is reasonable (200 chars should be safe for most systems)
+        if len(filename) > 200:
+            # Recalculate with shorter title
+            max_title_length = 200 - len(date) - len(bv_id) - 2  # 2 for underscores
+            safe_title = self.sanitize_filename(title, max_title_length)
+            filename = f"{date}_{safe_title}_{bv_id}"
+        
+        return filename
+    
     def process(
         self, 
         url: str, 
         auto_detect: bool = False,
         output_dir: Optional[str] = None,
         cleanup: bool = True,
-        silent: bool = False
+        silent: bool = False,
+        video_info: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Process Bilibili video by downloading and transcribing audio.
         
@@ -93,6 +163,7 @@ class BilibiliHandler:
             output_dir: Output directory for files
             cleanup: Whether to clean up temporary files
             silent: Whether to suppress detailed output (for batch processing)
+            video_info: Optional video metadata for improved file naming
             
         Returns:
             Dict containing processing results
@@ -131,9 +202,10 @@ class BilibiliHandler:
                 silent=silent
             )
             
-            # Extract BV ID for naming
+            # Generate filename based on video info
             bv_id = self.extract_bv_id(url) or "bilibili_video"
-            final_output = os.path.join(output_dir, f"{bv_id}.txt")
+            filename = self.generate_filename(bv_id, video_info)
+            final_output = os.path.join(output_dir, f"{filename}.txt")
             
             # Copy transcription to final location
             if os.path.exists(result["output_file"]) and result["output_file"] != final_output:
