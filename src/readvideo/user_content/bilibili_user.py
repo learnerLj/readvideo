@@ -1,6 +1,5 @@
 """Bilibili user content processing handler."""
 
-import asyncio
 import json
 import os
 import re
@@ -10,12 +9,7 @@ from typing import Any, Dict, List, Optional
 from rich.console import Console
 from rich.progress import Progress
 
-try:
-    import bilibili_api
-
-    BILIBILI_API_AVAILABLE = True
-except ImportError:
-    BILIBILI_API_AVAILABLE = False
+import bilibili_api
 
 from ..platforms.bilibili import BilibiliHandler
 
@@ -69,15 +63,6 @@ class BilibiliUserHandler:
         Returns:
             Dictionary containing user information
         """
-        if not BILIBILI_API_AVAILABLE:
-            return {
-                "uid": uid,
-                "name": f"User_{uid}",
-                "follower": 0,
-                "following": 0,
-                "error": "bilibili-api not available",
-            }
-
         try:
             user = bilibili_api.user.User(uid)
             user_info = await user.get_relation_info()
@@ -307,14 +292,14 @@ class BilibiliUserHandler:
         with open(status_file, "w", encoding="utf-8") as f:
             json.dump(status, f, ensure_ascii=False, indent=2)
 
-    def process_user(
+    async def process_user(
         self,
         user_input: str,
         output_dir: str,
         start_date: Optional[str] = None,
         max_videos: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Process all videos from a user.
+        """Process all videos from a user asynchronously.
 
         Args:
             user_input: User UID or space URL
@@ -325,18 +310,6 @@ class BilibiliUserHandler:
         Returns:
             Processing results summary
         """
-        return asyncio.run(
-            self._process_user_async(user_input, output_dir, start_date, max_videos)
-        )
-
-    async def _process_user_async(
-        self,
-        user_input: str,
-        output_dir: str,
-        start_date: Optional[str] = None,
-        max_videos: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """Async implementation of user processing."""
 
         try:
             # Extract UID
@@ -532,7 +505,9 @@ class BilibiliUserHandler:
                     successful_results
                 ),  # Videos processed in this run
                 "failed_videos": len(failed_results),  # Videos failed in this run
-                "skipped_videos": run_stats["skipped_this_run"],  # Videos skipped in this run
+                "skipped_videos": run_stats[
+                    "skipped_this_run"
+                ],  # Videos skipped in this run
                 "run_success_rate": run_success_rate,  # Success rate for attempted videos
                 "overall_completed": run_stats[
                     "total_completed"

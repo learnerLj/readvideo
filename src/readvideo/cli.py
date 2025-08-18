@@ -1,5 +1,6 @@
 """Command line interface for readvideo."""
 
+import asyncio
 import sys
 from typing import Optional, Union
 
@@ -412,11 +413,13 @@ def user_command(
             console.print(f"🔢 Video limit: {max_videos} videos", style="dim")
 
         # Process user
-        result = user_handler.process_user(
-            user_input=user_input,
-            output_dir=output_dir,
-            start_date=start_date,
-            max_videos=max_videos,
+        result = asyncio.run(
+            user_handler.process_user(
+                user_input=user_input,
+                output_dir=output_dir,
+                start_date=start_date,
+                max_videos=max_videos,
+            )
         )
 
         if result.get("success", False):
