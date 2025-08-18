@@ -411,17 +411,50 @@ def show_user_results(result: dict, verbose: bool):
     user_info = result.get('user_info', {})
     stats = result.get('processing_stats', {})
     
+    # User information
     table.add_row("User", f"{user_info.get('name', 'Unknown')} (UID: {user_info.get('uid', 'N/A')})")
     table.add_row("Followers", f"{user_info.get('follower', 0):,}")
-    table.add_row("Total Videos", str(stats.get('total_videos', 0)))
-    table.add_row("Processed", str(stats.get('processed_videos', 0)))
-    table.add_row("Failed", str(stats.get('failed_videos', 0)))
-    table.add_row("Success Rate", f"{stats.get('success_rate', 0):.1%}")
+    table.add_row("", "")  # Empty row for separation
+    
+    # Video statistics
+    table.add_row("Total Videos Found", str(stats.get('total_videos', 0)))
+    
+    # This run statistics
+    processed_this_run = stats.get('processed_videos', 0)
+    failed_this_run = stats.get('failed_videos', 0)
+    skipped_this_run = stats.get('skipped_videos', 0)
+    
+    if processed_this_run > 0 or failed_this_run > 0:
+        table.add_row("", "")  # Empty row for separation
+        table.add_row("[bold]This Run:", "")
+        table.add_row("  Processed", str(processed_this_run))
+        table.add_row("  Failed", str(failed_this_run))
+        if skipped_this_run > 0:
+            table.add_row("  Skipped (already done)", str(skipped_this_run))
+        
+        # Show success rate for this run if applicable
+        run_success_rate = stats.get('run_success_rate', 0)
+        if processed_this_run > 0 or failed_this_run > 0:
+            table.add_row("  Success Rate", f"{run_success_rate:.1%}")
+    
+    # Overall statistics
+    overall_completed = stats.get('overall_completed', 0)
+    overall_failed = stats.get('overall_failed', 0)
+    overall_completion_rate = stats.get('overall_completion_rate', 0)
+    
+    if overall_completed > 0 or overall_failed > 0:
+        table.add_row("", "")  # Empty row for separation
+        table.add_row("[bold]Overall Progress:", "")
+        table.add_row("  Completed", str(overall_completed))
+        if overall_failed > 0:
+            table.add_row("  Failed", str(overall_failed))
+        table.add_row("  Completion Rate", f"{overall_completion_rate:.1%}")
     
     console.print(table)
     
+    # Show processing details if verbose
     if verbose and result.get('results'):
-        console.print(f"\n📋 Processing details:", style="bold")
+        console.print(f"\n📋 Processing details (this run):", style="bold")
         for i, video_result in enumerate(result['results'][:5]):  # Show first 5
             video_info = video_result.get('video_info', {})
             status = "✅" if video_result.get('success', False) else "❌"

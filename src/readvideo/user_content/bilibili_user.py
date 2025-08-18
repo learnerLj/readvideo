@@ -234,10 +234,45 @@ class BilibiliUserHandler:
         
         try:
             with open(status_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                status = json.load(f)
+                # Clean up inconsistent states after loading
+                return self.cleanup_processing_status(status)
         except Exception as e:
             console.print(f"⚠️ Error loading processing status: {e}", style="yellow")
             return {"completed": [], "failed": [], "skipped": []}
+    
+    def cleanup_processing_status(self, status: Dict[str, List[str]]) -> Dict[str, List[str]]:
+        """Clean up inconsistent processing status.
+        
+        Ensures videos are only in one status list, prioritizing completed over failed.
+        
+        Args:
+            status: Raw status dictionary
+            
+        Returns:
+            Cleaned status dictionary
+        """
+        # Ensure all required keys exist
+        status.setdefault("completed", [])
+        status.setdefault("failed", [])
+        status.setdefault("skipped", [])
+        
+        # Remove duplicates within each list
+        status["completed"] = list(set(status["completed"]))
+        status["failed"] = list(set(status["failed"]))
+        status["skipped"] = list(set(status["skipped"]))
+        
+        # Priority: completed > failed
+        # Remove any video from failed list if it's in completed list
+        completed_set = set(status["completed"])
+        status["failed"] = [vid for vid in status["failed"] if vid not in completed_set]
+        
+        # Log cleanup if necessary
+        original_failed_count = len(status.get("failed", [])) + len(completed_set.intersection(set(status.get("failed", []))))
+        if original_failed_count != len(status["failed"]):
+            console.print(f"🧹 Cleaned up {original_failed_count - len(status['failed'])} inconsistent status entries", style="dim")
+        
+        return status
     
     def save_processing_status(self, user_dir: str, status: Dict[str, List[str]]):
         """Save processing status.
@@ -301,7 +336,15 @@ class BilibiliUserHandler:
             
             # Process videos
             results = []
-            failed_count = 0
+            
+            # Statistics for this run
+            attempted_this_run = 0
+            successful_this_run = 0
+            failed_this_run = 0
+            skipped_this_run = 0
+            
+            # Count already completed videos from previous runs
+            already_completed = len(status['completed'])
             
             with Progress() as progress:
                 task = progress.add_task("[cyan]Processing videos...", total=len(videos))
@@ -312,9 +355,11 @@ class BilibiliUserHandler:
                     # Skip if already processed
                     if bvid in status['completed']:
                         console.print(f"⏭️ Skipping already processed: {video['title']}", style="dim")
-                        status['skipped'].append(bvid)
+                        skipped_this_run += 1
                         progress.update(task, advance=1)
                         continue
+                    
+                    attempted_this_run += 1
                     
                     try:
                         console.print(f"\n🎬 Processing ({i+1}/{len(videos)}): {video['title']}", style="cyan")
@@ -325,19 +370,31 @@ class BilibiliUserHandler:
                             video_url,
                             output_dir=os.path.join(user_dir, "transcripts"),
                             cleanup=True,
-                            silent=True  # Use silent mode for batch processing
+                            silent=True,  # Use silent mode for batch processing
+                            video_info=video  # Pass video info for better file naming
                         )
                         
                         result['video_info'] = video
                         results.append(result)
-                        status['completed'].append(bvid)
+                        
+                        # Add to completed and remove from failed if it was there
+                        if bvid not in status['completed']:
+                            status['completed'].append(bvid)
+                        if bvid in status['failed']:
+                            status['failed'].remove(bvid)
+                        
+                        successful_this_run += 1
                         
                         console.print(f"✅ Completed: {video['title']}", style="green")
                         
                     except Exception as e:
                         console.print(f"❌ Failed to process {video['title']}: {e}", style="red")
-                        status['failed'].append(bvid)
-                        failed_count += 1
+                        
+                        # Add to failed only if not already completed
+                        if bvid not in status['completed'] and bvid not in status['failed']:
+                            status['failed'].append(bvid)
+                        
+                        failed_this_run += 1
                         
                         results.append({
                             "success": False,
@@ -349,13 +406,26 @@ class BilibiliUserHandler:
                     self.save_processing_status(user_dir, status)
                     progress.update(task, advance=1)
             
+            # Calculate statistics
+            run_stats = {
+                "attempted_this_run": attempted_this_run,
+                "successful_this_run": successful_this_run,
+                "failed_this_run": failed_this_run,
+                "skipped_this_run": skipped_this_run,
+                "already_completed": already_completed,
+                "total_completed": len(status['completed']),
+                "total_failed": len(status['failed'])
+            }
+            
             # Generate final summary
-            summary = self.generate_summary(user_info, videos, results, user_dir)
+            summary = self.generate_summary(user_info, videos, results, user_dir, run_stats)
             
             console.print(f"\n🎉 Processing completed!", style="bold green")
-            console.print(f"✅ Successful: {len(status['completed'])}", style="green")
-            console.print(f"❌ Failed: {len(status['failed'])}", style="red")
-            console.print(f"⏭️ Skipped: {len(status['skipped'])}", style="yellow")
+            if attempted_this_run > 0:
+                console.print(f"📊 This run: {successful_this_run} successful, {failed_this_run} failed", style="cyan")
+            if skipped_this_run > 0:
+                console.print(f"⏭️ Skipped: {skipped_this_run} already processed", style="yellow")
+            console.print(f"📈 Overall: {len(status['completed'])} completed, {len(status['failed'])} failed", style="dim")
             
             return summary
             
@@ -364,14 +434,15 @@ class BilibiliUserHandler:
             return {"success": False, "error": str(e)}
     
     def generate_summary(self, user_info: Dict[str, Any], videos: List[Dict[str, Any]], 
-                        results: List[Dict[str, Any]], user_dir: str) -> Dict[str, Any]:
+                        results: List[Dict[str, Any]], user_dir: str, run_stats: Dict[str, Any]) -> Dict[str, Any]:
         """Generate processing summary report.
         
         Args:
             user_info: User information
             videos: List of all videos
-            results: Processing results
+            results: Processing results from this run only
             user_dir: User directory path
+            run_stats: Statistics from this processing run
             
         Returns:
             Summary dictionary
@@ -379,14 +450,30 @@ class BilibiliUserHandler:
         successful_results = [r for r in results if r.get('success', False)]
         failed_results = [r for r in results if not r.get('success', False)]
         
+        # Calculate success rate for this run (only if videos were attempted)
+        run_success_rate = 0.0
+        if run_stats['attempted_this_run'] > 0:
+            run_success_rate = run_stats['successful_this_run'] / run_stats['attempted_this_run']
+        
+        # Calculate overall completion rate
+        overall_completion_rate = 0.0
+        if len(videos) > 0:
+            overall_completion_rate = run_stats['total_completed'] / len(videos)
+        
         summary = {
             "success": True,
             "user_info": user_info,
             "processing_stats": {
                 "total_videos": len(videos),
-                "processed_videos": len(successful_results),
-                "failed_videos": len(failed_results),
-                "success_rate": len(successful_results) / len(videos) if videos else 0,
+                "processed_videos": len(successful_results),  # Videos processed in this run
+                "failed_videos": len(failed_results),  # Videos failed in this run
+                "skipped_videos": run_stats['skipped_this_run'],  # Videos skipped in this run
+                "run_success_rate": run_success_rate,  # Success rate for attempted videos in this run
+                "overall_completed": run_stats['total_completed'],  # Total videos completed (including previous runs)
+                "overall_failed": run_stats['total_failed'],  # Total videos failed (including previous runs)
+                "overall_completion_rate": overall_completion_rate,  # Overall completion percentage
+                # Legacy field for backward compatibility (based on this run's processing)
+                "success_rate": run_success_rate,
                 "generated_at": datetime.now().isoformat()
             },
             "results": results
