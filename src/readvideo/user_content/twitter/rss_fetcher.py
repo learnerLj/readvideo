@@ -115,7 +115,9 @@ class RSSFetcher:
             logger.debug(f"🔍 Content length: {len(response.content)} bytes")
 
             if response.status_code == 429:
-                logger.warning(f"⚠️  Rate limited (429): {response.text[:200]}...")
+                logger.warning(
+                    f"⚠️  Rate limited (429): {response.text[:200]}..."
+                )
                 return [], False
             elif response.status_code == 503:
                 logger.warning(
@@ -127,7 +129,9 @@ class RSSFetcher:
 
             # Check if response content is empty
             if not response.content or len(response.content) < 50:
-                logger.warning(f"⚠️  Response too short: {len(response.content)} bytes")
+                logger.warning(
+                    f"⚠️  Response too short: {len(response.content)} bytes"
+                )
                 logger.debug(f"📝 Content: {response.text[:200]}...")
                 return [], False
 
@@ -160,7 +164,9 @@ class RSSFetcher:
                     "pubDate": safe_text(item.find("pubDate")),
                     "guid": safe_text(item.find("guid")),
                     "creator": safe_text(
-                        item.find(".//{http://purl.org/dc/elements/1.1/}creator")
+                        item.find(
+                            ".//{http://purl.org/dc/elements/1.1/}creator"
+                        )
                     ),
                 }
                 tweets.append(tweet)
@@ -241,7 +247,9 @@ class RSSFetcher:
         # Get first cursor for pagination
         cursor = await self.get_cursor_from_html(username)
         if not cursor:
-            logger.warning("❌ No pagination cursor found, returning first page only")
+            logger.warning(
+                "❌ No pagination cursor found, returning first page only"
+            )
             return all_tweets
 
         logger.info(f"🔑 Found pagination cursor: {cursor[:50]}...")
@@ -255,7 +263,9 @@ class RSSFetcher:
             # Add delay to avoid rate limiting
             if page_num > 2:
                 wait_time = 2
-                logger.debug(f"⏳ Waiting {wait_time}s to avoid rate limiting...")
+                logger.debug(
+                    f"⏳ Waiting {wait_time}s to avoid rate limiting..."
+                )
                 await asyncio.sleep(wait_time)
 
             tweets, success = await self.fetch_rss_page(
@@ -296,10 +306,14 @@ class RSSFetcher:
                     duplicate_count += 1
 
             if duplicate_count > 0:
-                logger.info(f"⚠️  Found {duplicate_count} duplicate tweets, skipping")
+                logger.info(
+                    f"⚠️  Found {duplicate_count} duplicate tweets, skipping"
+                )
 
             if len(new_tweets) == 0:
-                logger.info(f"✅ Page {page_num} all duplicates, fetching complete")
+                logger.info(
+                    f"✅ Page {page_num} all duplicates, fetching complete"
+                )
                 break
 
             all_tweets.extend(new_tweets)
@@ -314,10 +328,14 @@ class RSSFetcher:
                 response.raise_for_status()
 
                 if not response.text:
-                    logger.info("✅ Empty response for cursor page, fetching complete")
+                    logger.info(
+                        "✅ Empty response for cursor page, fetching complete"
+                    )
                     break
 
-                cursor_match = re.search(r'href="\?cursor=([^"]*)"', response.text)
+                cursor_match = re.search(
+                    r'href="\?cursor=([^"]*)"', response.text
+                )
 
                 if cursor_match:
                     new_cursor = cursor_match.group(1)
@@ -338,12 +356,15 @@ class RSSFetcher:
                     )
                 else:
                     logger.warning(
-                        f"⚠️  HTTP error getting cursor: " f"{e.response.status_code}"
+                        f"⚠️  HTTP error getting cursor: "
+                        f"{e.response.status_code}"
                     )
                 break
             except Exception as e:
                 error_type = type(e).__name__
-                logger.warning(f"⚠️  Failed to get next cursor: {error_type}: {e}")
+                logger.warning(
+                    f"⚠️  Failed to get next cursor: {error_type}: {e}"
+                )
                 logger.info("✅ Stopping pagination due to cursor error")
                 break
 

@@ -63,9 +63,13 @@ def detect_input_type(input_str: str) -> str:
     type=click.Path(),
     help="Output directory (default: current directory or input file directory)",
 )
-@click.option("--no-cleanup", is_flag=True, help="Do not clean up temporary files")
 @click.option(
-    "--info-only", is_flag=True, help="Show input information only, do not process"
+    "--no-cleanup", is_flag=True, help="Do not clean up temporary files"
+)
+@click.option(
+    "--info-only",
+    is_flag=True,
+    help="Show input information only, do not process",
 )
 @click.option(
     "--whisper-model",
@@ -73,7 +77,9 @@ def detect_input_type(input_str: str) -> str:
     help="Path to Whisper model file",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-@click.option("--proxy", help="HTTP proxy address (e.g., http://127.0.0.1:8080)")
+@click.option(
+    "--proxy", help="HTTP proxy address (e.g., http://127.0.0.1:8080)"
+)
 def main(
     input_source: str,
     auto_detect: bool,
@@ -171,7 +177,8 @@ def show_info(handler, input_source: str, input_type: str):
             if input_type == "youtube":
                 table.add_row("Video ID", info.get("video_id", ""))
                 table.add_row(
-                    "Has Transcripts", "Yes" if info.get("has_transcripts") else "No"
+                    "Has Transcripts",
+                    "Yes" if info.get("has_transcripts") else "No",
                 )
 
                 transcripts = info.get("available_transcripts", {})
@@ -179,7 +186,9 @@ def show_info(handler, input_source: str, input_type: str):
                     languages = [t["language"] for t in transcripts["manual"]]
                     table.add_row("Manual Subtitles", ", ".join(languages))
                 if transcripts.get("generated"):
-                    languages = [t["language"] for t in transcripts["generated"]]
+                    languages = [
+                        t["language"] for t in transcripts["generated"]
+                    ]
                     table.add_row("Auto Subtitles", ", ".join(languages))
             else:  # bilibili
                 table.add_row("BV ID", info.get("bv_id", ""))
@@ -224,7 +233,11 @@ def show_results(result: dict, verbose: bool):
     table.add_row("Platform", result.get("platform", "").title())
     table.add_row(
         "Method",
-        "Transcript" if result.get("method") == "transcript" else "Audio Transcription",
+        (
+            "Transcript"
+            if result.get("method") == "transcript"
+            else "Audio Transcription"
+        ),
     )
     table.add_row("Output File", result.get("output_file", ""))
 
@@ -247,7 +260,8 @@ def show_results(result: dict, verbose: bool):
 
     if verbose and result.get("temp_files"):
         console.print(
-            f"\n🗑️ Temporary files: {len(result['temp_files'])} cleaned up", style="dim"
+            f"\n🗑️ Temporary files: {len(result['temp_files'])} cleaned up",
+            style="dim",
         )
 
 
@@ -285,7 +299,9 @@ def info():
         console.print(f"  {example}", style="dim")
 
     console.print("\n📖 More information:", style="bold")
-    console.print("  GitHub: https://github.com/learnerLj/readvideo", style="dim")
+    console.print(
+        "  GitHub: https://github.com/learnerLj/readvideo", style="dim"
+    )
 
 
 # Create CLI group for multiple commands
@@ -309,9 +325,13 @@ def cli():
     type=click.Path(),
     help="Output directory (default: current directory or input file directory)",
 )
-@click.option("--no-cleanup", is_flag=True, help="Do not clean up temporary files")
 @click.option(
-    "--info-only", is_flag=True, help="Show input information only, do not process"
+    "--no-cleanup", is_flag=True, help="Do not clean up temporary files"
+)
+@click.option(
+    "--info-only",
+    is_flag=True,
+    help="Show input information only, do not process",
 )
 @click.option(
     "--whisper-model",
@@ -319,7 +339,9 @@ def cli():
     help="Path to Whisper model file",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-@click.option("--proxy", help="HTTP proxy address (e.g., http://127.0.0.1:8080)")
+@click.option(
+    "--proxy", help="HTTP proxy address (e.g., http://127.0.0.1:8080)"
+)
 def process_single(
     input_source,
     auto_detect,
@@ -374,7 +396,9 @@ def process_single(
     "Videos published on or after this date will be included. "
     "Date must be between 2005-01-01 and today.",
 )
-@click.option("--max-videos", type=int, help="Maximum number of videos to process")
+@click.option(
+    "--max-videos", type=int, help="Maximum number of videos to process"
+)
 @click.option(
     "--whisper-model",
     default="~/.whisper-models/ggml-large-v3.bin",
@@ -420,7 +444,9 @@ def user_command(
 
         console.print("🎯 Starting user processing...", style="bold cyan")
         if start_date:
-            console.print(f"📅 Date filter: videos from {start_date}", style="dim")
+            console.print(
+                f"📅 Date filter: videos from {start_date}", style="dim"
+            )
         if max_videos:
             console.print(f"🔢 Video limit: {max_videos} videos", style="dim")
 
@@ -514,7 +540,9 @@ def show_user_results(result: dict, verbose: bool):
     # Show processing details if verbose
     if verbose and result.get("results"):
         console.print("\n📋 Processing details (this run):", style="bold")
-        for i, video_result in enumerate(result["results"][:5]):  # Show first 5
+        for i, video_result in enumerate(
+            result["results"][:5]
+        ):  # Show first 5
             video_info = video_result.get("video_info", {})
             status = "✅" if video_result.get("success", False) else "❌"
             console.print(
@@ -523,7 +551,8 @@ def show_user_results(result: dict, verbose: bool):
 
         if len(result["results"]) > 5:
             console.print(
-                f"  ... and {len(result['results']) - 5} more videos", style="dim"
+                f"  ... and {len(result['results']) - 5} more videos",
+                style="dim",
             )
 
 
@@ -559,7 +588,9 @@ def show_user_results(result: dict, verbose: bool):
     help="Include retweets (default: exclude retweets, only show original content)",
 )
 @click.option(
-    "--include-replies", is_flag=True, help="Include replies (default: exclude replies)"
+    "--include-replies",
+    is_flag=True,
+    help="Include replies (default: exclude replies)",
 )
 @click.option(
     "--nitter-url",
@@ -628,7 +659,9 @@ def twitter_command(
                 f"📅 Start date filter: tweets from {start_date}", style="dim"
             )
         if end_date:
-            console.print(f"📅 End date filter: tweets until {end_date}", style="dim")
+            console.print(
+                f"📅 End date filter: tweets until {end_date}", style="dim"
+            )
         console.print(f"📄 Page limit: {max_pages} pages", style="dim")
 
         # Process user tweets

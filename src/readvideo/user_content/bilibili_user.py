@@ -18,7 +18,9 @@ console = Console()
 class BilibiliUserHandler:
     """Handler for processing all videos from a Bilibili user."""
 
-    def __init__(self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"):
+    def __init__(
+        self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"
+    ):
         """Initialize user handler.
 
         Args:
@@ -44,7 +46,11 @@ class BilibiliUserHandler:
             return int(user_input)
 
         # URL patterns for Bilibili user space
-        patterns = [r"space\.bilibili\.com/(\d+)", r"bilibili\.com/(\d+)", r"/(\d+)/?$"]
+        patterns = [
+            r"space\.bilibili\.com/(\d+)",
+            r"bilibili\.com/(\d+)",
+            r"/(\d+)/?$",
+        ]
 
         for pattern in patterns:
             match = re.search(pattern, user_input)
@@ -73,8 +79,15 @@ class BilibiliUserHandler:
                 "following": user_info.get("following", 0),
             }
         except Exception as e:
-            console.print(f"❌ Failed to get user info for UID {uid}: {e}", style="red")
-            return {"uid": uid, "name": f"User_{uid}", "follower": 0, "following": 0}
+            console.print(
+                f"❌ Failed to get user info for UID {uid}: {e}", style="red"
+            )
+            return {
+                "uid": uid,
+                "name": f"User_{uid}",
+                "follower": 0,
+                "following": 0,
+            }
 
     async def get_user_videos(
         self,
@@ -97,7 +110,9 @@ class BilibiliUserHandler:
             all_videos = []
             page = 1
 
-            console.print(f"🔍 Fetching videos for user {uid}...", style="cyan")
+            console.print(
+                f"🔍 Fetching videos for user {uid}...", style="cyan"
+            )
 
             # Parse start date if provided
             start_timestamp = None
@@ -106,8 +121,8 @@ class BilibiliUserHandler:
                 try:
                     from .utils import parse_date_to_timestamp_range
 
-                    start_timestamp, end_timestamp = parse_date_to_timestamp_range(
-                        start_date
+                    start_timestamp, end_timestamp = (
+                        parse_date_to_timestamp_range(start_date)
                     )
                     console.print(
                         f"📅 Date filter: videos from {start_date} (inclusive)",
@@ -164,7 +179,9 @@ class BilibiliUserHandler:
                         break
 
                 except Exception as e:
-                    console.print(f"⚠️ Error fetching page {page}: {e}", style="yellow")
+                    console.print(
+                        f"⚠️ Error fetching page {page}: {e}", style="yellow"
+                    )
                     break
 
             # Apply max_videos limit
@@ -177,10 +194,14 @@ class BilibiliUserHandler:
             return all_videos
 
         except Exception as e:
-            console.print(f"❌ Failed to get videos for user {uid}: {e}", style="red")
+            console.print(
+                f"❌ Failed to get videos for user {uid}: {e}", style="red"
+            )
             return []
 
-    def create_user_directory(self, output_dir: str, user_info: Dict[str, Any]) -> str:
+    def create_user_directory(
+        self, output_dir: str, user_info: Dict[str, Any]
+    ) -> str:
         """Create user-specific output directory.
 
         Args:
@@ -200,7 +221,10 @@ class BilibiliUserHandler:
         return user_dir
 
     def save_video_list(
-        self, user_dir: str, user_info: Dict[str, Any], videos: List[Dict[str, Any]]
+        self,
+        user_dir: str,
+        user_info: Dict[str, Any],
+        videos: List[Dict[str, Any]],
     ):
         """Save video list to JSON file.
 
@@ -220,7 +244,9 @@ class BilibiliUserHandler:
         with open(video_list_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-        console.print(f"💾 Saved video list to: {video_list_file}", style="dim")
+        console.print(
+            f"💾 Saved video list to: {video_list_file}", style="dim"
+        )
 
     def load_processing_status(self, user_dir: str) -> Dict[str, List[str]]:
         """Load processing status for resume capability.
@@ -242,7 +268,9 @@ class BilibiliUserHandler:
                 # Clean up inconsistent states after loading
                 return self.cleanup_processing_status(status)
         except Exception as e:
-            console.print(f"⚠️ Error loading processing status: {e}", style="yellow")
+            console.print(
+                f"⚠️ Error loading processing status: {e}", style="yellow"
+            )
             return {"completed": [], "failed": [], "skipped": []}
 
     def cleanup_processing_status(
@@ -271,7 +299,9 @@ class BilibiliUserHandler:
         # Priority: completed > failed
         # Remove any video from failed list if it's in completed list
         completed_set = set(status["completed"])
-        status["failed"] = [vid for vid in status["failed"] if vid not in completed_set]
+        status["failed"] = [
+            vid for vid in status["failed"] if vid not in completed_set
+        ]
 
         # Log cleanup if necessary
         original_failed_count = len(status.get("failed", [])) + len(
@@ -408,11 +438,14 @@ class BilibiliUserHandler:
 
                         successful_this_run += 1
 
-                        console.print(f"✅ Completed: {video['title']}", style="green")
+                        console.print(
+                            f"✅ Completed: {video['title']}", style="green"
+                        )
 
                     except Exception as e:
                         console.print(
-                            f"❌ Failed to process {video['title']}: {e}", style="red"
+                            f"❌ Failed to process {video['title']}: {e}",
+                            style="red",
                         )
 
                         # Add to failed only if not already completed
@@ -425,7 +458,11 @@ class BilibiliUserHandler:
                         failed_this_run += 1
 
                         results.append(
-                            {"success": False, "error": str(e), "video_info": video}
+                            {
+                                "success": False,
+                                "error": str(e),
+                                "video_info": video,
+                            }
                         )
 
                     # Save status after each video
@@ -457,7 +494,8 @@ class BilibiliUserHandler:
                 )
             if skipped_this_run > 0:
                 console.print(
-                    f"⏭️ Skipped: {skipped_this_run} already processed", style="yellow"
+                    f"⏭️ Skipped: {skipped_this_run} already processed",
+                    style="yellow",
                 )
             console.print(
                 f"📈 Overall: {len(status['completed'])} completed, "
@@ -498,13 +536,16 @@ class BilibiliUserHandler:
         run_success_rate = 0.0
         if run_stats["attempted_this_run"] > 0:
             run_success_rate = (
-                run_stats["successful_this_run"] / run_stats["attempted_this_run"]
+                run_stats["successful_this_run"]
+                / run_stats["attempted_this_run"]
             )
 
         # Calculate overall completion rate
         overall_completion_rate = 0.0
         if len(videos) > 0:
-            overall_completion_rate = run_stats["total_completed"] / len(videos)
+            overall_completion_rate = run_stats["total_completed"] / len(
+                videos
+            )
 
         summary = {
             "success": True,
@@ -514,7 +555,9 @@ class BilibiliUserHandler:
                 "processed_videos": len(
                     successful_results
                 ),  # Videos processed in this run
-                "failed_videos": len(failed_results),  # Videos failed in this run
+                "failed_videos": len(
+                    failed_results
+                ),  # Videos failed in this run
                 "skipped_videos": run_stats[
                     "skipped_this_run"
                 ],  # Videos skipped in this run

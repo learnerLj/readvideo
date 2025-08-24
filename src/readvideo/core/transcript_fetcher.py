@@ -5,12 +5,10 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from rich.console import Console
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
-from youtube_transcript_api import (
-    NoTranscriptFound,
-    TranscriptsDisabled,
-    YouTubeTranscriptApi,
-)
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_fixed)
+from youtube_transcript_api import (NoTranscriptFound, TranscriptsDisabled,
+                                    YouTubeTranscriptApi)
 from youtube_transcript_api.formatters import TextFormatter
 
 console = Console()
@@ -32,7 +30,9 @@ class YouTubeTranscriptFetcher:
     """Fetcher for YouTube video transcripts using youtube-transcript-api."""
 
     def __init__(
-        self, cookies_path: Optional[str] = None, proxies: Optional[Dict] = None
+        self,
+        cookies_path: Optional[str] = None,
+        proxies: Optional[Dict] = None,
     ):
         """Initialize the transcript fetcher.
 
@@ -70,9 +70,13 @@ class YouTubeTranscriptFetcher:
             cookie_jar = http.cookiejar.MozillaCookieJar(cookies_path)
             cookie_jar.load(ignore_discard=True, ignore_expires=True)
             session.cookies.update(cookie_jar)  # type: ignore
-            console.print(f"🍪 Loaded cookies from file: {cookies_path}", style="dim")
+            console.print(
+                f"🍪 Loaded cookies from file: {cookies_path}", style="dim"
+            )
         except Exception as e:
-            console.print(f"⚠️ Unable to load cookies file: {e}", style="yellow")
+            console.print(
+                f"⚠️ Unable to load cookies file: {e}", style="yellow"
+            )
 
     def extract_video_id(self, url: str) -> Optional[str]:
         """Extract video ID from YouTube URL.
@@ -207,8 +211,10 @@ class YouTubeTranscriptFetcher:
             if prefer_manual:
                 # First try manual transcripts
                 try:
-                    transcript = transcript_list.find_manually_created_transcript(
-                        languages
+                    transcript = (
+                        transcript_list.find_manually_created_transcript(
+                            languages
+                        )
                     )
                     selected_info = {
                         "type": "manual",
@@ -225,7 +231,9 @@ class YouTubeTranscriptFetcher:
             # If no manual transcript found, try generated ones
             if transcript is None:
                 try:
-                    transcript = transcript_list.find_generated_transcript(languages)
+                    transcript = transcript_list.find_generated_transcript(
+                        languages
+                    )
                     selected_info = {
                         "type": "generated",
                         "language": transcript.language,
@@ -248,7 +256,8 @@ class YouTubeTranscriptFetcher:
                         "language_code": transcript.language_code,
                     }
                     console.print(
-                        f"✅ Found subtitles: {transcript.language}", style="cyan"
+                        f"✅ Found subtitles: {transcript.language}",
+                        style="cyan",
                     )
                 except NoTranscriptFound:
                     raise TranscriptFetchError(
@@ -271,7 +280,9 @@ class YouTubeTranscriptFetcher:
             }
 
         except TranscriptsDisabled:
-            raise TranscriptFetchError(f"Transcripts are disabled for video {video_id}")
+            raise TranscriptFetchError(
+                f"Transcripts are disabled for video {video_id}"
+            )
         except NoTranscriptFound:
             raise TranscriptFetchError(
                 f"No transcript found for video {video_id} in languages: {languages}"
@@ -316,7 +327,9 @@ class YouTubeTranscriptFetcher:
         """
         video_id = self.extract_video_id(url)
         if not video_id:
-            raise TranscriptFetchError(f"Could not extract video ID from URL: {url}")
+            raise TranscriptFetchError(
+                f"Could not extract video ID from URL: {url}"
+            )
 
         console.print(f"🔍 Checking video subtitles: {video_id}", style="cyan")
 
@@ -352,4 +365,6 @@ def is_youtube_url(url: str) -> bool:
     """
     youtube_patterns = [r"youtube\.com", r"youtu\.be", r"m\.youtube\.com"]
 
-    return any(re.search(pattern, url, re.IGNORECASE) for pattern in youtube_patterns)
+    return any(
+        re.search(pattern, url, re.IGNORECASE) for pattern in youtube_patterns
+    )

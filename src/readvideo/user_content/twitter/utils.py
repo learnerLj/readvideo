@@ -31,7 +31,9 @@ def parse_twitter_date(date_str: str) -> Optional[datetime]:
             # Alternative format without timezone
             return datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S")
         except ValueError:
-            console.print(f"⚠️ Failed to parse date: {date_str}", style="yellow")
+            console.print(
+                f"⚠️ Failed to parse date: {date_str}", style="yellow"
+            )
             return None
 
 
@@ -61,7 +63,9 @@ def filter_tweets_by_date(
         try:
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         except ValueError:
-            console.print(f"⚠️ Invalid start date format: {start_date}", style="yellow")
+            console.print(
+                f"⚠️ Invalid start date format: {start_date}", style="yellow"
+            )
             return tweets
 
     if end_date:
@@ -70,7 +74,9 @@ def filter_tweets_by_date(
             # Set end time to end of day
             end_dt = end_dt.replace(hour=23, minute=59, second=59)
         except ValueError:
-            console.print(f"⚠️ Invalid end date format: {end_date}", style="yellow")
+            console.print(
+                f"⚠️ Invalid end date format: {end_date}", style="yellow"
+            )
             return tweets
 
     filtered_tweets = []
@@ -220,7 +226,9 @@ def clean_title_content(title: str) -> str:
         return ""
 
     # Clean HTML entities
-    cleaned = title.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    cleaned = (
+        title.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    )
 
     # Remove "R to @username:" prefix (reply indicator)
     cleaned = re.sub(r"^R to @\\w+:\\s*", "", cleaned)
@@ -266,7 +274,9 @@ def clean_tweet_content(content: str) -> str:
     cleaned = re.sub(r"<[^>]+>", "", content).strip()
 
     # Clean HTML entities
-    cleaned = cleaned.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    cleaned = (
+        cleaned.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    )
 
     # Replace localhost links with Twitter links
     cleaned = replace_localhost_links(cleaned)
@@ -331,7 +341,9 @@ def save_tweets_to_markdown(
     try:
         with open(filename, "w", encoding="utf-8") as f:
             f.write(f"# 📱 @{username} Tweet Collection\n\n")
-            f.write(f"**Fetch Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(
+                f"**Fetch Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            )
             f.write(f"**Total Tweets**: {len(tweets)}\n")
             f.write("**Data Source**: Nitter RSS API\n\n")
             f.write("---\n\n")
@@ -350,22 +362,29 @@ def save_tweets_to_markdown(
                 if tweet_type == "retweet":
                     # This is a retweet - show original author info
                     original_creator = tweet.get(
-                        "original_creator", tweet.get("creator", "").lstrip("@")
+                        "original_creator",
+                        tweet.get("creator", "").lstrip("@"),
                     )
                     f.write(f"**类型**: 转推 @{original_creator} 的内容\n")
                     if tweet_id and original_username:
-                        twitter_url = generate_twitter_url(tweet_id, original_username)
+                        twitter_url = generate_twitter_url(
+                            tweet_id, original_username
+                        )
                         f.write(f"**原推链接**: {twitter_url}\n")
                 elif tweet_type == "reply":
                     # This is a reply
                     f.write("**类型**: 回复\n")
                     if tweet_id and original_username:
-                        twitter_url = generate_twitter_url(tweet_id, original_username)
+                        twitter_url = generate_twitter_url(
+                            tweet_id, original_username
+                        )
                         f.write(f"**Twitter链接**: {twitter_url}\n")
                 else:
                     # This is an original tweet
                     if tweet_id and original_username:
-                        twitter_url = generate_twitter_url(tweet_id, original_username)
+                        twitter_url = generate_twitter_url(
+                            tweet_id, original_username
+                        )
                         f.write(f"**Twitter链接**: {twitter_url}\n")
 
                 f.write("\n")

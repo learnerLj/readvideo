@@ -30,6 +30,7 @@ dependencies = [
     "httpx>=0.28.1",
     "curl-cffi>=0.13.0",
     "defusedxml>=0.7.1",
+    "ffmpeg-python>=0.2.0",
 ]
 
 [project.urls]

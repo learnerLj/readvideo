@@ -7,12 +7,8 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .rss_fetcher import RSSFetcher
-from .utils import (
-    filter_tweets_by_content_type,
-    filter_tweets_by_date,
-    save_tweets_to_json,
-    save_tweets_to_markdown,
-)
+from .utils import (filter_tweets_by_content_type, filter_tweets_by_date,
+                    save_tweets_to_json, save_tweets_to_markdown)
 
 console = Console()
 
@@ -53,8 +49,12 @@ class TwitterHandler:
         Returns:
             Dict containing processing results
         """
-        console.print(f"🐦 Processing Twitter user: @{username}", style="bold cyan")
-        console.print(f"🌐 Using Nitter instance: {self.nitter_url}", style="dim")
+        console.print(
+            f"🐦 Processing Twitter user: @{username}", style="bold cyan"
+        )
+        console.print(
+            f"🌐 Using Nitter instance: {self.nitter_url}", style="dim"
+        )
 
         # Validate username
         if not self._validate_username(username):
@@ -120,9 +120,15 @@ class TwitterHandler:
             )
 
             if len(tweets) < pre_filter_count:
-                retweets_filtered = sum(1 for t in tweets if t.get("is_retweet", False))
-                replies_filtered = sum(1 for t in tweets if t.get("is_reply", False))
-                original_tweets = len(tweets) - retweets_filtered - replies_filtered
+                retweets_filtered = sum(
+                    1 for t in tweets if t.get("is_retweet", False)
+                )
+                replies_filtered = sum(
+                    1 for t in tweets if t.get("is_reply", False)
+                )
+                original_tweets = (
+                    len(tweets) - retweets_filtered - replies_filtered
+                )
 
                 console.print(
                     f"🔍 Content filter: {len(tweets)} tweets kept "
@@ -140,10 +146,14 @@ class TwitterHandler:
                 }
 
             # Save results
-            console.print(f"💾 Saving {len(tweets)} tweets...", style="bold green")
+            console.print(
+                f"💾 Saving {len(tweets)} tweets...", style="bold green"
+            )
 
             json_file = save_tweets_to_json(tweets, username, output_path)
-            markdown_file = save_tweets_to_markdown(tweets, username, output_path)
+            markdown_file = save_tweets_to_markdown(
+                tweets, username, output_path
+            )
 
             return {
                 "success": True,
@@ -157,7 +167,9 @@ class TwitterHandler:
             }
 
         except Exception as e:
-            console.print(f"❌ Error processing user @{username}: {e}", style="red")
+            console.print(
+                f"❌ Error processing user @{username}: {e}", style="red"
+            )
             return {
                 "success": False,
                 "error": str(e),
@@ -181,7 +193,9 @@ class TwitterHandler:
             username = username[1:]
 
         # Basic validation: alphanumeric and underscore, 1-15 chars
-        return (username.isalnum() or "_" in username) and 1 <= len(username) <= 15
+        return (username.isalnum() or "_" in username) and 1 <= len(
+            username
+        ) <= 15
 
     def get_user_info(self, username: str) -> Dict:
         """Get basic information about a Twitter user.

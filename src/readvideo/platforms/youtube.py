@@ -9,11 +9,9 @@ from rich.console import Console
 from tenacity import RetryError
 
 from ..core.audio_processor import AudioProcessingError, AudioProcessor
-from ..core.transcript_fetcher import (
-    TranscriptFetchError,
-    YouTubeTranscriptFetcher,
-    is_youtube_url,
-)
+from ..core.transcript_fetcher import (TranscriptFetchError,
+                                       YouTubeTranscriptFetcher,
+                                       is_youtube_url)
 from ..core.whisper_wrapper import WhisperWrapper
 
 console = Console()
@@ -98,7 +96,9 @@ class YouTubeHandler:
                 url, auto_detect, output_dir, cleanup
             )
 
-    def _process_with_transcript(self, url: str, output_dir: str) -> Dict[str, Any]:
+    def _process_with_transcript(
+        self, url: str, output_dir: str
+    ) -> Dict[str, Any]:
         """Process video using available transcripts.
 
         Args:
@@ -244,7 +244,9 @@ class YouTubeHandler:
                 # Find downloaded file (yt-dlp creates files with ] in name)
                 m4a_files = [f for f in os.listdir(".") if f.endswith("].m4a")]
                 if not m4a_files:
-                    raise AudioProcessingError("No audio file found after download")
+                    raise AudioProcessingError(
+                        "No audio file found after download"
+                    )
 
                 # Get the most recent file
                 audio_file = max(m4a_files, key=os.path.getctime)
@@ -256,7 +258,9 @@ class YouTubeHandler:
         except subprocess.CalledProcessError as e:
             raise AudioProcessingError(f"yt-dlp failed: {e}")
         except FileNotFoundError:
-            raise AudioProcessingError("yt-dlp not found. Please install yt-dlp.")
+            raise AudioProcessingError(
+                "yt-dlp not found. Please install yt-dlp."
+            )
 
     def _convert_to_wav(self, audio_file: str, output_dir: str) -> str:
         """Convert audio file to WAV format for whisper.
@@ -272,7 +276,11 @@ class YouTubeHandler:
         wav_file = os.path.join(output_dir, f"{basename}.wav")
 
         return self.audio_processor.convert_audio_format(
-            audio_file, wav_file, target_format="wav", sample_rate=16000, channels=1
+            audio_file,
+            wav_file,
+            target_format="wav",
+            sample_rate=16000,
+            channels=1,
         )
 
     def get_video_info(self, url: str) -> Dict[str, Any]:
@@ -293,8 +301,8 @@ class YouTubeHandler:
 
         try:
             # Get available transcripts
-            available_transcripts = self.transcript_fetcher.get_available_transcripts(
-                video_id
+            available_transcripts = (
+                self.transcript_fetcher.get_available_transcripts(video_id)
             )
 
             return {

@@ -106,7 +106,8 @@ class WhisperWrapper:
                     language or "unknown", language or "unknown"
                 )
                 console.print(
-                    f"🌍 Using {lang_name} language recognition...", style="yellow"
+                    f"🌍 Using {lang_name} language recognition...",
+                    style="yellow",
                 )
 
         try:
@@ -197,7 +198,9 @@ class WhisperWrapper:
         # Files to potentially clean up
         temp_files = [
             os.path.join(audio_dir, f"{base_name}.wav"),  # Converted wav file
-            os.path.join(audio_dir, f"{base_name}_temp.m4a"),  # Temp audio from video
+            os.path.join(
+                audio_dir, f"{base_name}_temp.m4a"
+            ),  # Temp audio from video
         ]
 
         if not keep_transcription:

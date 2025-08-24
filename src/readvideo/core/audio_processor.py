@@ -1,12 +1,10 @@
 """Audio processing utilities using ffmpeg."""
 
-import json
 import os
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import ffmpeg
 from rich.console import Console
 
 console = Console()
@@ -46,11 +44,30 @@ class AudioProcessor:
 
     def verify_ffmpeg(self) -> None:
         """Verify that ffmpeg is available."""
-        if not shutil.which("ffmpeg"):
-            console.print(
-                "⚠️ Warning: ffmpeg not found. Video processing may be limited.",
-                style="yellow",
+        try:
+            # Simple way to check if ffmpeg is available
+            # Try to run ffmpeg with version flag
+            import subprocess
+
+            result = subprocess.run(
+                ["ffmpeg", "-version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
+            if result.returncode == 0:
+                return  # ffmpeg is available
+        except (
+            FileNotFoundError,
+            subprocess.TimeoutExpired,
+            subprocess.CalledProcessError,
+        ):
+            pass
+
+        console.print(
+            "⚠️ Warning: ffmpeg not found. Video processing may be limited.",
+            style="yellow",
+        )
 
     def get_file_info(self, file_path: str) -> Dict[str, Any]:
         """Get information about audio/video file.
@@ -116,20 +133,15 @@ class AudioProcessor:
         console.print("🔄 Extracting audio track...", style="cyan")
 
         try:
-            # Use ffmpeg to extract audio
-            cmd = [
-                "ffmpeg",
-                "-hide_banner",  # Hide version info
-                "-i",
-                video_file,
-                "-vn",  # No video
-                "-acodec",
-                "copy",  # Copy audio codec when possible
-                "-y",  # Overwrite output file
-                output_file,
-            ]
-
-            subprocess.run(cmd, check=True)
+            # Use ffmpeg-python to extract audio
+            (
+                ffmpeg.input(video_file)
+                .output(
+                    output_file, vn=None, acodec="copy"
+                )  # vn=None means no video, copy audio codec
+                .overwrite_output()
+                .run(quiet=True)
+            )
 
             if os.path.exists(output_file):
                 console.print(
@@ -142,10 +154,12 @@ class AudioProcessor:
                     "Audio extraction completed but output file not found"
                 )
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"ffmpeg failed with exit code {e.returncode}"
-            if e.stderr:
-                error_msg += f": {e.stderr}"
+        except ffmpeg.Error as e:
+            error_msg = f"ffmpeg failed: {e}"
+            if hasattr(e, "stderr") and e.stderr:
+                error_msg += (
+                    f": {e.stderr.decode('utf-8', errors='ignore')[:300]}"
+                )
             raise AudioProcessingError(error_msg)
         except FileNotFoundError:
             raise AudioProcessingError(
@@ -178,30 +192,44 @@ class AudioProcessor:
         console.print("🔄 Converting audio format...", style="cyan")
 
         try:
-            # Build ffmpeg command for audio conversion
-            cmd = [
-                "ffmpeg",
-                "-hide_banner",  # Hide version info
-                "-i",
-                input_file,
-                "-ar",
-                str(sample_rate),  # Sample rate
-                "-ac",
-                str(channels),  # Number of channels
-                "-y",  # Overwrite output file
-            ]
+            # Build ffmpeg-python stream for audio conversion
+            input_stream = ffmpeg.input(input_file)
 
             # Add format-specific options
             if target_format == "wav":
-                cmd.extend(["-c:a", "pcm_s16le"])  # PCM 16-bit little-endian
+                output_stream = ffmpeg.output(
+                    input_stream,
+                    output_file,
+                    ar=sample_rate,
+                    ac=channels,
+                    acodec="pcm_s16le",
+                )
             elif target_format == "mp3":
-                cmd.extend(["-c:a", "libmp3lame", "-b:a", "128k"])
+                output_stream = ffmpeg.output(
+                    input_stream,
+                    output_file,
+                    ar=sample_rate,
+                    ac=channels,
+                    acodec="libmp3lame",
+                    audio_bitrate="128k",
+                )
             elif target_format == "m4a":
-                cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+                output_stream = ffmpeg.output(
+                    input_stream,
+                    output_file,
+                    ar=sample_rate,
+                    ac=channels,
+                    acodec="aac",
+                    audio_bitrate="128k",
+                )
+            else:
+                # Default conversion
+                output_stream = ffmpeg.output(
+                    input_stream, output_file, ar=sample_rate, ac=channels
+                )
 
-            cmd.append(output_file)
-
-            subprocess.run(cmd, check=True)
+            # Run the conversion
+            ffmpeg.run(output_stream, overwrite_output=True, quiet=True)
 
             if os.path.exists(output_file):
                 console.print(
@@ -214,10 +242,12 @@ class AudioProcessor:
                     "Audio conversion completed but output file not found"
                 )
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"ffmpeg conversion failed with exit code {e.returncode}"
-            if e.stderr:
-                error_msg += f": {e.stderr}"
+        except ffmpeg.Error as e:
+            error_msg = f"ffmpeg conversion failed: {e}"
+            if hasattr(e, "stderr") and e.stderr:
+                error_msg += (
+                    f": {e.stderr.decode('utf-8', errors='ignore')[:300]}"
+                )
             raise AudioProcessingError(error_msg)
         except FileNotFoundError:
             raise AudioProcessingError(
@@ -265,7 +295,8 @@ class AudioProcessor:
         try:
             if file_info["is_audio"]:
                 console.print(
-                    f"🎵 Processing audio file: {file_info['name']}", style="cyan"
+                    f"🎵 Processing audio file: {file_info['name']}",
+                    style="cyan",
                 )
 
                 if file_info["extension"] == target_format:
@@ -280,12 +311,15 @@ class AudioProcessor:
 
             elif file_info["is_video"]:
                 console.print(
-                    f"🎬 Processing video file: {file_info['name']}", style="cyan"
+                    f"🎬 Processing video file: {file_info['name']}",
+                    style="cyan",
                 )
 
                 # Extract audio from video
                 temp_audio = os.path.join(output_dir, f"{base_name}_temp.m4a")
-                extracted_audio = self.extract_audio_from_video(input_file, temp_audio)
+                extracted_audio = self.extract_audio_from_video(
+                    input_file, temp_audio
+                )
                 temp_files.append(extracted_audio)
 
                 # Convert to target format if needed
@@ -338,45 +372,19 @@ class AudioProcessor:
             Duration in seconds
         """
         try:
-            cmd = [
-                "ffprobe",
-                "-v",
-                "quiet",
-                "-print_format",
-                "json",
-                "-show_format",
-                audio_file,
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            data = json.loads(result.stdout)
-
-            duration = float(data["format"]["duration"])
+            # Use ffmpeg.probe to get audio file info
+            probe_data = ffmpeg.probe(audio_file)
+            duration = float(probe_data["format"]["duration"])
             return duration
 
-        except subprocess.CalledProcessError:
-            # Fallback: try with ffmpeg
-            try:
-                cmd = [
-                    "ffmpeg",
-                    "-hide_banner",
-                    "-i",
-                    audio_file,
-                    "-f",
-                    "null",
-                    "-",
-                    "-v",
-                    "quiet",
-                    "-stats",
-                ]
-                subprocess.run(cmd, capture_output=True, text=True, check=True)
-                # This is a fallback, return a reasonable default
-                return 1.0
-            except Exception:
-                raise AudioProcessingError(
-                    "Failed to get audio duration: ffprobe/ffmpeg failed"
+        except ffmpeg.Error as e:
+            error_msg = f"Failed to get audio duration: {e}"
+            if hasattr(e, "stderr") and e.stderr:
+                error_msg += (
+                    f": {e.stderr.decode('utf-8', errors='ignore')[:200]}"
                 )
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            raise AudioProcessingError(error_msg)
+        except (KeyError, ValueError) as e:
             raise AudioProcessingError(f"Failed to parse audio duration: {e}")
         except FileNotFoundError:
             raise AudioProcessingError(
@@ -398,7 +406,9 @@ class AudioProcessor:
 
             # Basic validations
             if duration < 0.1:  # Less than 100ms
-                raise AudioProcessingError("Audio file is too short for transcription")
+                raise AudioProcessingError(
+                    "Audio file is too short for transcription"
+                )
 
             if file_size < 1024:  # Less than 1KB
                 raise AudioProcessingError(

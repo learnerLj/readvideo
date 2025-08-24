@@ -14,7 +14,9 @@ console = Console()
 class LocalMediaHandler:
     """Handler for processing local audio and video files."""
 
-    def __init__(self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"):
+    def __init__(
+        self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"
+    ):
         """Initialize local media handler.
 
         Args:
@@ -67,7 +69,9 @@ class LocalMediaHandler:
         file_path = os.path.abspath(file_path)
         file_info = self.audio_processor.get_file_info(file_path)
 
-        console.print(f"📁 Processing local file: {file_info['name']}", style="cyan")
+        console.print(
+            f"📁 Processing local file: {file_info['name']}", style="cyan"
+        )
 
         # Set up output directory
         if output_dir is None:
@@ -80,11 +84,21 @@ class LocalMediaHandler:
         try:
             if file_info["is_audio"]:
                 return self._process_audio_file(
-                    file_path, file_info, auto_detect, output_dir, cleanup, temp_files
+                    file_path,
+                    file_info,
+                    auto_detect,
+                    output_dir,
+                    cleanup,
+                    temp_files,
                 )
             elif file_info["is_video"]:
                 return self._process_video_file(
-                    file_path, file_info, auto_detect, output_dir, cleanup, temp_files
+                    file_path,
+                    file_info,
+                    auto_detect,
+                    output_dir,
+                    cleanup,
+                    temp_files,
                 )
             else:
                 raise AudioProcessingError(
@@ -121,7 +135,9 @@ class LocalMediaHandler:
         Returns:
             Dict containing processing results
         """
-        console.print(f"🎵 Processing audio file: {file_info['name']}", style="cyan")
+        console.print(
+            f"🎵 Processing audio file: {file_info['name']}", style="cyan"
+        )
 
         # Validate audio for transcription
         self.audio_processor.validate_audio_for_transcription(file_path)
@@ -129,12 +145,21 @@ class LocalMediaHandler:
         # Get audio duration for display
         try:
             duration = self.audio_processor.get_audio_duration(file_path)
-            console.print(f"⏱️ Audio duration: {duration:.1f} seconds", style="dim")
+            console.print(
+                f"⏱️ Audio duration: {duration:.1f} seconds", style="dim"
+            )
         except Exception:
             console.print("⏱️ Unable to get audio duration", style="dim")
 
         # Convert to WAV if needed
-        if file_info["extension"] in ["mp3", "m4a", "wav", "flac", "ogg", "aac"]:
+        if file_info["extension"] in [
+            "mp3",
+            "m4a",
+            "wav",
+            "flac",
+            "ogg",
+            "aac",
+        ]:
             wav_file = os.path.join(output_dir, f"{file_info['stem']}.wav")
 
             if file_info["extension"] == "wav":
@@ -212,7 +237,9 @@ class LocalMediaHandler:
         Returns:
             Dict containing processing results
         """
-        console.print(f"🎬 Processing video file: {file_info['name']}", style="cyan")
+        console.print(
+            f"🎬 Processing video file: {file_info['name']}", style="cyan"
+        )
 
         # Extract audio from video
         temp_audio = os.path.join(output_dir, f"{file_info['stem']}_temp.m4a")
@@ -235,7 +262,10 @@ class LocalMediaHandler:
         # Transcribe with whisper-cli
         language = None if auto_detect else "zh"
         result = self.whisper_wrapper.transcribe(
-            wav_audio, language=language, auto_detect=auto_detect, output_dir=output_dir
+            wav_audio,
+            language=language,
+            auto_detect=auto_detect,
+            output_dir=output_dir,
         )
 
         # Generate final output filename
@@ -282,7 +312,9 @@ class LocalMediaHandler:
             try:
                 duration = self.audio_processor.get_audio_duration(file_path)
                 file_info["duration_seconds"] = duration
-                file_info["duration_formatted"] = self._format_duration(duration)
+                file_info["duration_formatted"] = self._format_duration(
+                    duration
+                )
             except Exception:
                 file_info["duration_seconds"] = None
                 file_info["duration_formatted"] = "Unknown"
@@ -316,6 +348,10 @@ class LocalMediaHandler:
             Dict with supported audio and video formats
         """
         return {
-            "audio_formats": list(self.audio_processor.supported_audio_formats),
-            "video_formats": list(self.audio_processor.supported_video_formats),
+            "audio_formats": list(
+                self.audio_processor.supported_audio_formats
+            ),
+            "video_formats": list(
+                self.audio_processor.supported_video_formats
+            ),
         }

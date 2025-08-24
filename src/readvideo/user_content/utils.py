@@ -46,13 +46,19 @@ def validate_date_with_range_check(date_string: str) -> Tuple[bool, str]:
     import re
 
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_string):
-        return False, "Invalid date format. Use YYYY-MM-DD format (e.g., 2024-01-15)"
+        return (
+            False,
+            "Invalid date format. Use YYYY-MM-DD format (e.g., 2024-01-15)",
+        )
 
     # Check basic format
     try:
         parsed_date = datetime.strptime(date_string, "%Y-%m-%d")
     except ValueError:
-        return False, "Invalid date format. Use YYYY-MM-DD format (e.g., 2024-01-15)"
+        return (
+            False,
+            "Invalid date format. Use YYYY-MM-DD format (e.g., 2024-01-15)",
+        )
 
     # Check if date is in reasonable range
     current_date = datetime.now()
@@ -67,7 +73,9 @@ def validate_date_with_range_check(date_string: str) -> Tuple[bool, str]:
         )
 
     # Don't allow future dates (with 1 day buffer for timezone differences)
-    max_date = current_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    max_date = current_date.replace(
+        hour=23, minute=59, second=59, microsecond=999999
+    )
     if parsed_date.date() > max_date.date():
         return (
             False,
@@ -94,7 +102,9 @@ def parse_date_to_timestamp_range(date_string: str) -> Tuple[int, int]:
         parsed_date = datetime.strptime(date_string, "%Y-%m-%d")
 
         # Create start of day (00:00:00) and end of day (23:59:59) in local timezone
-        start_of_day = parsed_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_day = parsed_date.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         end_of_day = parsed_date.replace(
             hour=23, minute=59, second=59, microsecond=999999
         )
@@ -169,7 +179,11 @@ def extract_video_id_from_url(url: str) -> Optional[str]:
     for pattern in patterns:
         match = re.search(pattern, url)
         if match:
-            bv_id = match.group(1) if "BV" in match.group(0) else f"BV{match.group(1)}"
+            bv_id = (
+                match.group(1)
+                if "BV" in match.group(0)
+                else f"BV{match.group(1)}"
+            )
             return bv_id if bv_id.startswith("BV") else f"BV{bv_id}"
 
     return None
