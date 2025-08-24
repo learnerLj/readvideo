@@ -14,6 +14,7 @@ from .platforms.bilibili import BilibiliHandler
 from .platforms.local import LocalMediaHandler
 from .platforms.youtube import YouTubeHandler
 from .user_content.bilibili_user import BilibiliUserHandler
+from .user_content.twitter import TwitterHandler
 from .user_content.utils import validate_date_with_range_check
 
 console = Console()
@@ -524,6 +525,169 @@ def show_user_results(result: dict, verbose: bool):
             console.print(
                 f"  ... and {len(result['results']) - 5} more videos", style="dim"
             )
+
+
+# Add Twitter processing command
+@cli.command("twitter")
+@click.argument("username", required=True)
+@click.option(
+    "--output-dir",
+    "-o",
+    required=True,
+    type=click.Path(),
+    help="Output directory (required for Twitter processing)",
+)
+@click.option(
+    "--start-date",
+    help="Start date for tweet filtering (YYYY-MM-DD format, e.g., 2024-01-15). "
+    "Tweets published on or after this date will be included.",
+)
+@click.option(
+    "--end-date",
+    help="End date for tweet filtering (YYYY-MM-DD format, e.g., 2024-12-31). "
+    "Tweets published on or before this date will be included.",
+)
+@click.option(
+    "--max-pages",
+    type=int,
+    default=50,
+    help="Maximum number of pages to fetch (default: 50)",
+)
+@click.option(
+    "--include-retweets",
+    is_flag=True,
+    help="Include retweets (default: exclude retweets, only show original content)",
+)
+@click.option(
+    "--include-replies", is_flag=True, help="Include replies (default: exclude replies)"
+)
+@click.option(
+    "--nitter-url",
+    default="http://10.144.0.3:8080",
+    help="Nitter instance URL (default: http://10.144.0.3:8080)",
+)
+@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+def twitter_command(
+    username,
+    output_dir,
+    start_date,
+    end_date,
+    max_pages,
+    include_retweets,
+    include_replies,
+    nitter_url,
+    verbose,
+):
+    """Process all tweets from a Twitter user via RSS.
+
+    USERNAME: Twitter username (without @)
+
+    Examples:
+      readvideo twitter elonmusk --output-dir ./tweets
+      readvideo twitter username -o ./output --start-date 2024-01-01 --max-pages 20
+      readvideo twitter user -o ./tweets --start-date 2024-01-01 --end-date 2024-12-31
+
+    Date filtering:
+      --start-date 2024-01-01  # Include tweets from Jan 1, 2024 onwards
+      --end-date 2024-12-31    # Include tweets until Dec 31, 2024
+
+    Note: Dates must be in YYYY-MM-DD format.
+    """
+    if not verbose:
+        print_banner()
+
+    # Clean username (remove @ if present)
+    if username.startswith("@"):
+        username = username[1:]
+
+    # Validate date formats if provided
+    if start_date:
+        is_valid, error_message = validate_date_with_range_check(start_date)
+        if not is_valid:
+            console.print(f"❌ Start date: {error_message}", style="red")
+            sys.exit(1)
+
+    if end_date:
+        is_valid, error_message = validate_date_with_range_check(end_date)
+        if not is_valid:
+            console.print(f"❌ End date: {error_message}", style="red")
+            sys.exit(1)
+
+    # Validate max_pages
+    if max_pages <= 0:
+        console.print("❌ max-pages must be a positive integer", style="red")
+        sys.exit(1)
+
+    try:
+        # Initialize Twitter handler
+        twitter_handler = TwitterHandler(nitter_url)
+
+        console.print("🐦 Starting Twitter processing...", style="bold cyan")
+        if start_date:
+            console.print(
+                f"📅 Start date filter: tweets from {start_date}", style="dim"
+            )
+        if end_date:
+            console.print(f"📅 End date filter: tweets until {end_date}", style="dim")
+        console.print(f"📄 Page limit: {max_pages} pages", style="dim")
+
+        # Process user tweets
+        result = asyncio.run(
+            twitter_handler.process_user(
+                username=username,
+                output_dir=output_dir,
+                max_pages=max_pages,
+                exclude_retweets=not include_retweets,
+                exclude_replies=not include_replies,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
+        if result.get("success", False):
+            show_twitter_results(result, verbose)
+        else:
+            console.print(
+                f"❌ Twitter processing failed: {result.get('error', 'Unknown error')}",
+                style="red",
+            )
+            sys.exit(1)
+
+    except KeyboardInterrupt:
+        console.print("\n⚠️ Operation interrupted by user", style="yellow")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"❌ Twitter processing failed: {e}", style="red")
+        if verbose:
+            import traceback
+
+            console.print(traceback.format_exc(), style="dim")
+        sys.exit(1)
+
+
+def show_twitter_results(result: dict, verbose: bool):
+    """Show Twitter processing results."""
+    console.print("\n🎉 Twitter processing completed!", style="bold green")
+
+    # Create results table
+    table = Table(show_header=False, box=None)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="white")
+
+    table.add_row("Username", f"@{result.get('username', 'unknown')}")
+    table.add_row("Total Tweets", str(result.get("total_tweets", 0)))
+    table.add_row("Output Directory", result.get("output_dir", ""))
+
+    output_files = result.get("output_files", {})
+    if output_files.get("json"):
+        table.add_row("JSON File", output_files["json"])
+    if output_files.get("markdown"):
+        table.add_row("Markdown File", output_files["markdown"])
+
+    console.print(table)
+
+    if verbose:
+        console.print("\n📋 Processing completed successfully", style="dim")
 
 
 if __name__ == "__main__":
