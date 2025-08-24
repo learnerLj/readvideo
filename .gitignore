@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .claude
+.mypy_cache/
 
 # Python version files
 .python-version

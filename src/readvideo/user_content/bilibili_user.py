@@ -1,9 +1,9 @@
 """Bilibili user content processing handler."""
 
-from datetime import datetime
 import json
 import os
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import bilibili_api

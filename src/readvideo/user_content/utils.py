@@ -1,7 +1,7 @@
 """Utility functions for user content processing."""
 
-from datetime import datetime
 import re
+from datetime import datetime
 from typing import Optional, Tuple
 
 
