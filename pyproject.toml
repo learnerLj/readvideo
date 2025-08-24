@@ -45,6 +45,9 @@ readvideo = "readvideo.cli:cli"
 requires = ["uv_build>=0.8.8,<0.9.0"]
 build-backend = "uv_build"
 
+[tool.uv_build]
+packages = ["src"]
+
 [dependency-groups]
 dev = [
     "flake8>=7.3.0",
