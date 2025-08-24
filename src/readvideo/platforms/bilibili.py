@@ -4,8 +4,9 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
 
@@ -16,10 +17,132 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+def detect_audio_format(file_path: str) -> Tuple[Optional[str], bool]:
+    """Detect audio format using mimetypes and file extension.
+
+    Args:
+        file_path: Path to audio file
+
+    Returns:
+        Tuple of (detected_format, is_valid_audio)
+    """
+    try:
+        if not os.path.exists(file_path):
+            return None, False
+
+        file_size = os.path.getsize(file_path)
+        if file_size < 1000:  # Less than 1KB
+            return None, False
+
+        # Check for HTML content (anti-bot protection)
+        try:
+            with open(file_path, "rb") as f:
+                header = f.read(500)  # Read first 500 bytes
+
+            if b"<html" in header.lower() or b"<!doctype" in header.lower():
+                logger.warning(
+                    f"File {file_path} contains HTML content, likely blocked"
+                )
+                return None, False
+        except Exception:
+            pass
+
+        # Use mimetypes to detect format
+        import mimetypes
+
+        mime_type, _ = mimetypes.guess_type(file_path)
+
+        # Map mime types to simple format names
+        mime_to_format = {
+            "audio/mpeg": "mp3",
+            "audio/mp3": "mp3",
+            "audio/x-mpeg": "mp3",
+            "audio/mp4": "m4a",
+            "audio/x-m4a": "m4a",
+            "audio/aac": "aac",
+            "audio/x-aac": "aac",
+            "audio/wav": "wav",
+            "audio/x-wav": "wav",
+            "audio/wave": "wav",
+            "audio/flac": "flac",
+            "audio/x-flac": "flac",
+            "audio/ogg": "ogg",
+            "audio/vorbis": "ogg",
+            "video/mp4": "m4a",  # MP4 container can contain audio
+        }
+
+        detected_format = None
+        if mime_type:
+            detected_format = mime_to_format.get(mime_type)
+
+        # Fallback: use file extension if mime type detection fails
+        if not detected_format:
+            ext = os.path.splitext(file_path)[1].lower()
+            ext_to_format = {
+                ".mp3": "mp3",
+                ".m4a": "m4a",
+                ".aac": "aac",
+                ".wav": "wav",
+                ".flac": "flac",
+                ".ogg": "ogg",
+            }
+            detected_format = ext_to_format.get(ext)
+
+        is_valid = detected_format is not None
+        return detected_format, is_valid
+
+    except Exception as e:
+        logger.warning(f"Failed to detect format for {file_path}: {e}")
+        return None, False
+
+
+def validate_audio_with_ffprobe(
+    file_path: str,
+) -> Tuple[bool, Optional[float]]:
+    """Validate audio file using ffprobe.
+
+    Args:
+        file_path: Path to audio file
+
+    Returns:
+        Tuple of (is_valid, duration_seconds)
+    """
+    try:
+        import ffmpeg
+
+        # Use ffmpeg.probe to get file info
+        probe_data = ffmpeg.probe(file_path)
+
+        # Check if file has audio streams
+        streams = probe_data.get("streams", [])
+        audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
+
+        if not audio_streams:
+            return False, None
+
+        # Get duration
+        format_info = probe_data.get("format", {})
+        duration = format_info.get("duration")
+
+        if duration:
+            duration = float(duration)
+            if duration < 0.1:  # Less than 100ms
+                return False, None
+            return True, duration
+
+        return True, None
+
+    except Exception as e:
+        logger.debug(f"ffprobe validation failed for {file_path}: {e}")
+        return False, None
+
+
 class BilibiliHandler:
     """Handler for processing Bilibili videos."""
 
-    def __init__(self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"):
+    def __init__(
+        self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"
+    ):
         """Initialize Bilibili handler.
 
         Args:
@@ -46,20 +169,13 @@ class BilibiliHandler:
         Returns:
             True if yt-dlp is available, False otherwise
         """
-        import shutil
-
         try:
-            if shutil.which("yt-dlp"):
-                # Verify yt-dlp actually works
-                result = subprocess.run(
-                    ["yt-dlp", "--version"], capture_output=True, text=True, timeout=5
-                )
-                if result.returncode == 0:
-                    logger.debug(f"yt-dlp available: {result.stdout.strip()}")
-                    return True
-            return False
-        except Exception as e:
-            logger.debug(f"yt-dlp availability check failed: {e}")
+            import yt_dlp  # noqa: F401
+
+            logger.debug("yt-dlp Python library available")
+            return True
+        except ImportError:
+            logger.debug("yt-dlp Python library not available")
             return False
 
     def _is_ytdlp_available(self) -> bool:
@@ -82,7 +198,8 @@ class BilibiliHandler:
         bilibili_patterns = [r"bilibili\.com", r"b23\.tv", r"m\.bilibili\.com"]
 
         return any(
-            re.search(pattern, url, re.IGNORECASE) for pattern in bilibili_patterns
+            re.search(pattern, url, re.IGNORECASE)
+            for pattern in bilibili_patterns
         )
 
     def extract_bv_id(self, url: str) -> Optional[str]:
@@ -100,7 +217,9 @@ class BilibiliHandler:
             match = re.search(pattern, url)
             if match:
                 bv_id = (
-                    match.group(1) if "BV" in match.group(0) else f"BV{match.group(1)}"
+                    match.group(1)
+                    if "BV" in match.group(0)
+                    else f"BV{match.group(1)}"
                 )
                 return bv_id if bv_id.startswith("BV") else f"BV{bv_id}"
 
@@ -133,7 +252,9 @@ class BilibiliHandler:
             truncated = sanitized[:max_length]
             # Try to end at a word boundary
             last_underscore = truncated.rfind("_")
-            if last_underscore > max_length * 0.7:  # If underscore is in the last 30%
+            if (
+                last_underscore > max_length * 0.7
+            ):  # If underscore is in the last 30%
                 truncated = truncated[:last_underscore]
             sanitized = truncated.rstrip("_")
 
@@ -143,37 +264,31 @@ class BilibiliHandler:
     def generate_filename(
         self, bv_id: str, video_info: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate filename based on video info and BV ID.
+        """Generate filename based on video title and BV ID.
 
         Args:
             bv_id: Bilibili BV ID
-            video_info: Optional video metadata with title and date
+            video_info: Optional video metadata with title
 
         Returns:
-            Generated filename without extension
+            Generated filename without extension in format: 标题_BV号
         """
         if not video_info:
             return bv_id
 
-        # Extract date and title
-        date = video_info.get("created_date", "")
+        # Extract title
         title = video_info.get("title", "")
 
-        if not date or not title:
+        if not title:
             return bv_id
 
         # Sanitize title
-        safe_title = self.sanitize_filename(title)
+        # Reserve space for _BV号 (BV号通常12字符，加下划线共13字符)
+        max_title_length = 200 - len(bv_id) - 1  # 1 for underscore
+        safe_title = self.sanitize_filename(title, max_title_length)
 
-        # Build filename: date_title_bvid
-        filename = f"{date}_{safe_title}_{bv_id}"
-
-        # Ensure total length is reasonable (200 chars should be safe for most systems)
-        if len(filename) > 200:
-            # Recalculate with shorter title
-            max_title_length = 200 - len(date) - len(bv_id) - 2  # 2 for underscores
-            safe_title = self.sanitize_filename(title, max_title_length)
-            filename = f"{date}_{safe_title}_{bv_id}"
+        # Build filename: 标题_BV号
+        filename = f"{safe_title}_{bv_id}"
 
         return filename
 
@@ -214,7 +329,9 @@ class BilibiliHandler:
 
         try:
             # Download audio using BBDown
-            console.print("🎬 Downloading audio from Bilibili...", style="cyan")
+            console.print(
+                "🎬 Downloading audio from Bilibili...", style="cyan"
+            )
             audio_file = self._download_audio(url, output_dir)
             temp_files.append(audio_file)
 
@@ -233,10 +350,17 @@ class BilibiliHandler:
                 silent=silent,
             )
 
-            # Generate filename based on video info
+            # Use the audio filename format for final output (keeps title and BV ID)
             bv_id = self.extract_bv_id(url) or "bilibili_video"
-            filename = self.generate_filename(bv_id, video_info)
-            final_output = os.path.join(output_dir, f"{filename}.txt")
+
+            if hasattr(result, "get") and result.get("audio_file"):
+                audio_filename = os.path.basename(result["audio_file"])
+                # Change extension from .m4a/.wav to .txt
+                base_name = os.path.splitext(audio_filename)[0]
+                final_output = os.path.join(output_dir, f"{base_name}.txt")
+            else:
+                # Fallback to BV ID only
+                final_output = os.path.join(output_dir, f"{bv_id}.txt")
 
             # Copy transcription to final location
             if (
@@ -277,66 +401,94 @@ class BilibiliHandler:
         Returns:
             Path to downloaded audio file
         """
+        # Create temporary isolated directory for this download
+        temp_download_dir = tempfile.mkdtemp(prefix="ytdlp_", dir=output_dir)
+        logger.debug(
+            f"Created temporary download directory: {temp_download_dir}"
+        )
+
         try:
-            # Build yt-dlp command for audio extraction
-            cmd = [
-                "yt-dlp",
-                "--extract-audio",
-                "--audio-format",
-                "m4a",
-                "--no-playlist",
-                url,
-            ]
+            import yt_dlp
 
-            # Set output directory
-            original_dir = os.getcwd()
-            os.chdir(output_dir)
+            # Configure yt-dlp options
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": os.path.join(
+                    temp_download_dir, "%(title).200s [%(id)s].%(ext)s"
+                ),
+                "extractaudio": True,
+                "audioformat": "m4a",
+                "noplaylist": True,
+            }
 
-            try:
-                logger.info("🔄 Attempting download with yt-dlp...")
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, check=True, timeout=300
+            # Add Chrome cookies support by default
+            ydl_opts["cookiesfrombrowser"] = ("chrome",)
+            logger.info("🍪 Using cookies from Chrome browser")
+
+            logger.info("🔄 Attempting download with yt-dlp Python library...")
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Download the audio
+                ydl.extract_info(url, download=True)
+
+                # Download completed successfully
+
+                # Find and validate downloaded audio files
+                audio_candidates = self._find_audio_candidates(
+                    temp_download_dir, tool="yt-dlp"
                 )
-                logger.debug(f"yt-dlp stdout: {result.stdout[:500]}...")
 
-                # Find the downloaded audio file
-                # yt-dlp creates files like "视频标题 [BV1234567].m4a"
-                m4a_files = [f for f in os.listdir(".") if f.endswith(".m4a")]
-
-                if not m4a_files:
+                if not audio_candidates:
+                    # List all files for debugging
+                    all_files = os.listdir(temp_download_dir)
                     raise AudioProcessingError(
-                        "No audio file found after yt-dlp download"
+                        f"No valid audio file found after yt-dlp download. "
+                        f"Files in temp dir: {all_files}"
                     )
 
-                # Get the most recent file (in case there are multiple)
-                audio_file = max(m4a_files, key=os.path.getmtime)
+                # Select the best audio file using enhanced validation
+                audio_file = self._select_best_audio_file(audio_candidates)
 
-                # Basic validation
-                file_size = os.path.getsize(audio_file)
-                if file_size < 10000:  # < 10KB probably not valid
-                    raise AudioProcessingError(
-                        f"Downloaded file too small: {file_size} bytes"
-                    )
+                # Move file to output directory
+                final_path = os.path.join(
+                    output_dir, os.path.basename(audio_file)
+                )
+                if os.path.exists(final_path):
+                    # Generate unique name if file exists
+                    base, ext = os.path.splitext(os.path.basename(audio_file))
+                    counter = 1
+                    while os.path.exists(final_path):
+                        final_path = os.path.join(
+                            output_dir, f"{base}_{counter}{ext}"
+                        )
+                        counter += 1
 
-                logger.info(f"✅ Downloaded with yt-dlp: {audio_file}")
-                return os.path.join(output_dir, audio_file)
+                os.rename(audio_file, final_path)
+                logger.info(
+                    f"✅ Downloaded with yt-dlp: {os.path.basename(final_path)}"
+                )
+                return final_path
 
-            finally:
-                os.chdir(original_dir)
-
-        except subprocess.TimeoutExpired:
-            raise AudioProcessingError("yt-dlp download timed out after 5 minutes")
-        except subprocess.CalledProcessError as e:
-            error_msg = f"yt-dlp failed with exit code {e.returncode}"
-            if e.stderr:
-                error_msg += f": {e.stderr[:300]}"
-            raise AudioProcessingError(error_msg)
-        except FileNotFoundError:
+        except ImportError:
             raise AudioProcessingError(
-                "yt-dlp not found. Please install: pip install yt-dlp"
+                "yt-dlp library not found. Please install: uv add yt-dlp"
             )
         except Exception as e:
             raise AudioProcessingError(f"yt-dlp download failed: {str(e)}")
+        finally:
+            # Clean up temporary directory
+            try:
+                import shutil
+
+                if os.path.exists(temp_download_dir):
+                    shutil.rmtree(temp_download_dir)
+                    logger.debug(
+                        f"Cleaned up temp directory: {temp_download_dir}"
+                    )
+            except Exception as cleanup_e:
+                logger.warning(
+                    f"Failed to cleanup temp directory: {cleanup_e}"
+                )
 
     def _download_with_bbdown(self, url: str, output_dir: str) -> str:
         """Download audio from Bilibili using BBDown.
@@ -348,41 +500,67 @@ class BilibiliHandler:
         Returns:
             Path to downloaded audio file
         """
+        # Create temporary isolated directory for this download
+        temp_download_dir = tempfile.mkdtemp(prefix="bbdown_", dir=output_dir)
+        logger.debug(
+            f"Created temporary download directory: {temp_download_dir}"
+        )
+
         try:
-            # Build BBDown command
+            # Build BBDown command (BBDown uses system cookies automatically)
             cmd = ["BBDown", "--audio-only", url]
 
-            # Set output directory
+            # Set temporary directory as working directory
             original_dir = os.getcwd()
-            os.chdir(output_dir)
+            os.chdir(temp_download_dir)
 
             try:
                 # Run BBDown and capture output for debugging
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, check=True
+                )
                 logger.debug(f"BBDown stdout: {result.stdout[:500]}...")
 
-                # Find audio files in current directory and subdirectories
-                audio_files = self._find_audio_files(".")
-                logger.debug(
-                    f"Found {len(audio_files)} potential audio files: {audio_files}"
+                # Find and validate downloaded audio files
+                audio_candidates = self._find_audio_candidates(
+                    temp_download_dir, tool="bbdown"
                 )
 
-                if not audio_files:
+                if not audio_candidates:
                     # List all files for debugging
                     all_files = []
-                    for root, dirs, files in os.walk("."):
+                    for root, dirs, files in os.walk(temp_download_dir):
                         for file in files:
                             all_files.append(os.path.join(root, file))
                     logger.error(f"All files found: {all_files}")
 
                     raise AudioProcessingError(
-                        f"No audio file found after BBDown download. "
+                        f"No valid audio file found after BBDown download. "
                         f"Found {len(all_files)} files: {all_files[:5]}"
                     )
 
-                # Validate and get the best audio file
-                valid_audio_file = self._get_valid_audio_file(audio_files)
-                return os.path.join(output_dir, valid_audio_file)
+                # Select the best audio file using enhanced validation
+                audio_file = self._select_best_audio_file(audio_candidates)
+
+                # Move file to output directory
+                final_path = os.path.join(
+                    output_dir, os.path.basename(audio_file)
+                )
+                if os.path.exists(final_path):
+                    # Generate unique name if file exists
+                    base, ext = os.path.splitext(os.path.basename(audio_file))
+                    counter = 1
+                    while os.path.exists(final_path):
+                        final_path = os.path.join(
+                            output_dir, f"{base}_{counter}{ext}"
+                        )
+                        counter += 1
+
+                os.rename(audio_file, final_path)
+                logger.info(
+                    f"✅ Downloaded with BBDown: {os.path.basename(final_path)}"
+                )
+                return final_path
 
             finally:
                 os.chdir(original_dir)
@@ -398,6 +576,20 @@ class BilibiliHandler:
             raise AudioProcessingError(
                 "BBDown not found. Please install BBDown to download from Bilibili."
             )
+        finally:
+            # Clean up temporary directory
+            try:
+                import shutil
+
+                if os.path.exists(temp_download_dir):
+                    shutil.rmtree(temp_download_dir)
+                    logger.debug(
+                        f"Cleaned up temp directory: {temp_download_dir}"
+                    )
+            except Exception as cleanup_e:
+                logger.warning(
+                    f"Failed to cleanup temp directory: {cleanup_e}"
+                )
 
     def _download_audio(self, url: str, output_dir: str) -> str:
         """Download audio from Bilibili with fallback support."""
@@ -425,137 +617,109 @@ class BilibiliHandler:
                 item_path = os.path.join(output_dir, item)
                 # Check if it's a directory with only digits in the name
                 if os.path.isdir(item_path) and item.isdigit():
-                    logger.debug(f"Cleaning up BBDown residual directory: {item_path}")
+                    logger.debug(
+                        f"Cleaning up BBDown residual directory: {item_path}"
+                    )
                     shutil.rmtree(item_path)
         except Exception as e:
             # Don't fail the whole process if cleanup fails
             logger.debug(f"Failed to cleanup BBDown residuals: {e}")
 
-    def _find_audio_files(self, search_dir: str) -> List[str]:
-        """Find all potential audio files in directory and subdirectories.
+    def _find_audio_candidates(
+        self, search_dir: str, tool: str = "unknown"
+    ) -> List[Dict[str, Any]]:
+        """Find and analyze potential audio files with enhanced validation.
 
         Args:
             search_dir: Directory to search in
+            tool: Name of the download tool used (for logging)
 
         Returns:
-            List of relative paths to potential audio files
+            List of audio file candidates with metadata
         """
         audio_extensions = [".m4a", ".mp3", ".aac", ".wav", ".flac", ".ogg"]
-        audio_files = []
+        candidates = []
 
         for root, dirs, files in os.walk(search_dir):
             for file in files:
                 if any(file.lower().endswith(ext) for ext in audio_extensions):
-                    # Get relative path from search_dir
-                    relative_path = os.path.relpath(
-                        os.path.join(root, file), search_dir
-                    )
-                    audio_files.append(relative_path)
+                    file_path = os.path.join(root, file)
 
-        return audio_files
+                    # Basic file info
+                    try:
+                        file_size = os.path.getsize(file_path)
+                        mtime = os.path.getmtime(file_path)
 
-    def _get_valid_audio_file(self, audio_files: List[str]) -> str:
-        """Get the first valid audio file from the list.
+                        # Skip obviously invalid files
+                        if file_size < 1000:  # Less than 1KB
+                            logger.debug(
+                                f"Skipping {file}: too small ({file_size} bytes)"
+                            )
+                            continue
+
+                        # Detect format and validate content
+                        detected_format, is_valid = detect_audio_format(
+                            file_path
+                        )
+
+                        candidate = {
+                            "path": file_path,
+                            "filename": file,
+                            "size": file_size,
+                            "mtime": mtime,
+                            "detected_format": detected_format,
+                            "format_valid": is_valid,
+                            "tool": tool,
+                        }
+
+                        candidates.append(candidate)
+                        logger.debug(
+                            f"Found candidate: {file} (size: {file_size}, format: {detected_format}, valid: {is_valid})"
+                        )
+
+                    except Exception as e:
+                        logger.warning(f"Failed to analyze {file}: {e}")
+                        continue
+
+        logger.info(f"Found {len(candidates)} audio candidates from {tool}")
+        return candidates
+
+    def _select_best_audio_file(self, candidates: List[Dict[str, Any]]) -> str:
+        """Select the first valid audio file from candidates.
 
         Args:
-            audio_files: List of potential audio file paths
+            candidates: List of audio file candidates with metadata
 
         Returns:
-            Path to valid audio file
+            Path to a valid audio file
 
         Raises:
             AudioProcessingError: If no valid audio files found
         """
-        for audio_file in audio_files:
-            try:
-                # Check if file exists and has reasonable size
-                if not os.path.exists(audio_file):
-                    continue
+        if not candidates:
+            raise AudioProcessingError("No audio file candidates provided")
 
-                file_size = os.path.getsize(audio_file)
-                if file_size < 1000:  # Less than 1KB is likely not a real audio file
-                    logger.warning(
-                        f"File {audio_file} too small ({file_size} bytes), skipping"
-                    )
-                    continue
-
-                # Check if file starts with HTML content
-                # (common when blocked by anti-bot)
-                try:
-                    with open(audio_file, "rb") as f:
-                        first_bytes = f.read(200)
-
-                    # Check for HTML content
-                    if (
-                        first_bytes.startswith(b"<html")
-                        or first_bytes.startswith(b"<!DOCTYPE")
-                        or b"<iframe" in first_bytes[:100]
-                    ):
-                        logger.warning(
-                            f"❌ File {audio_file} is HTML (anti-bot protection), "
-                            "skipping"
-                        )
-                        # Show preview for debugging
-                        try:
-                            preview = first_bytes.decode("utf-8", errors="ignore")[:150]
-                            logger.warning(f"HTML preview: {preview}...")
-                        except Exception:
-                            pass
-                        continue
-
-                    # Check for other text-based error responses
-                    if (
-                        first_bytes.startswith(b"{")
-                        and b"error" in first_bytes[:100].lower()
-                    ):
-                        logger.warning(
-                            f"❌ File {audio_file} appears to be JSON error " "response"
-                        )
-                        continue
-
-                except Exception as e:
-                    logger.warning(f"Could not read file header for {audio_file}: {e}")
-
-                # If file is reasonably large and doesn't appear to be an
-                # error page, accept it
-                if file_size > 50000:  # > 50KB should be valid audio
-                    logger.info(
-                        f"✅ Found valid audio file: {audio_file} "
-                        f"(size: {file_size} bytes)"
-                    )
-                    return audio_file
-                else:
-                    logger.warning(
-                        f"File {audio_file} might be too small ({file_size} bytes) "
-                        "but will try it"
-                    )
-                    # Still try smaller files as some short audio clips
-                    # might be legitimate
-                    return audio_file
-
-            except Exception as e:
-                logger.warning(f"Error validating {audio_file}: {e}")
-                continue
-
-        # If we get here, no valid audio files were found
-        file_details = []
-        for audio_file in audio_files[:5]:  # Show first 5 files
-            try:
-                size = (
-                    os.path.getsize(audio_file)
-                    if os.path.exists(audio_file)
-                    else "missing"
+        # Find the first file with valid audio format
+        for candidate in candidates:
+            if candidate["format_valid"]:
+                logger.info(
+                    f"Selected audio file: {candidate['filename']} "
+                    f"(format: {candidate['detected_format']}, size: {candidate['size']} bytes)"
                 )
-                file_details.append(f"{audio_file} ({size} bytes)")
-            except Exception:
-                file_details.append(f"{audio_file} (error)")
+                return str(candidate["path"])
+
+        # If no valid format found, provide detailed error
+        error_details = []
+        for candidate in candidates[:3]:  # Show top 3 for debugging
+            error_details.append(
+                f"{candidate['filename']}: {candidate['detected_format'] or 'unknown format'} "
+                f"({candidate['size']} bytes)"
+            )
 
         raise AudioProcessingError(
-            f"No valid audio files found. Checked {len(audio_files)} files. "
-            f"Details: {file_details}. This usually means BBDown was blocked "
-            f"by anti-bot protection. Possible solutions: 1) Try again later, "
-            f"2) Use a different network/VPN, 3) Check if BBDown login is "
-            f"required for this video."
+            f"No valid audio files found among {len(candidates)} candidates. "
+            f"Files checked: {'; '.join(error_details)}. This usually means the download "
+            f"was blocked by anti-bot protection."
         )
 
     def _convert_to_wav(self, audio_file: str, output_dir: str) -> str:
@@ -572,7 +736,11 @@ class BilibiliHandler:
         wav_file = os.path.join(output_dir, f"{basename}.wav")
 
         return self.audio_processor.convert_audio_format(
-            audio_file, wav_file, target_format="wav", sample_rate=16000, channels=1
+            audio_file,
+            wav_file,
+            target_format="wav",
+            sample_rate=16000,
+            channels=1,
         )
 
     def get_video_info(self, url: str) -> Dict[str, Any]:
