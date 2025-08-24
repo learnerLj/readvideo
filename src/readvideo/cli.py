@@ -16,6 +16,7 @@ from .platforms.youtube import YouTubeHandler
 from .user_content.bilibili_user import BilibiliUserHandler
 from .user_content.twitter import TwitterHandler
 from .user_content.utils import validate_date_with_range_check
+from .user_content.youtube_user import YouTubeUserHandler
 
 console = Console()
 
@@ -718,6 +719,162 @@ def show_twitter_results(result: dict, verbose: bool):
         table.add_row("Markdown File", output_files["markdown"])
 
     console.print(table)
+
+    if verbose:
+        console.print("\n📋 Processing completed successfully", style="dim")
+
+
+# Add YouTube channel processing command
+@cli.command("youtube-channel")
+@click.argument("channel_input", required=True)
+@click.option(
+    "--output-dir",
+    "-o",
+    required=True,
+    type=click.Path(),
+    help="Output directory (required for channel processing)",
+)
+@click.option(
+    "--start-date",
+    help="Start date for video filtering (YYYY-MM-DD format, e.g., 2024-01-15). "
+    "Videos published on or after this date will be included.",
+)
+@click.option(
+    "--max-videos",
+    type=int,
+    help="Maximum number of videos to process (e.g., --max-videos 50)",
+)
+@click.option(
+    "--whisper-model",
+    default="~/.whisper-models/ggml-large-v3.bin",
+    help="Path to whisper model file for transcription",
+)
+@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+def youtube_channel_command(
+    channel_input, output_dir, start_date, max_videos, whisper_model, verbose
+):
+    """Process all videos from a YouTube channel.
+
+    CHANNEL_INPUT: YouTube channel (@username) or channel URL
+
+    Examples:
+      readvideo youtube-channel @PewDiePie --output-dir ./channel_analysis
+      readvideo youtube-channel https://www.youtube.com/@username -o ./output
+      readvideo youtube-channel @username -o ./output --start-date 2024-01-15 --max-videos 50
+
+    Date filtering:
+      --start-date 2024-01-01  # Include videos from Jan 1, 2024 onwards
+      --start-date 2023-12-25  # Include videos from Dec 25, 2023 onwards
+
+    Note: Date must be in YYYY-MM-DD format.
+    """
+    if not verbose:
+        print_banner()
+
+    # Validate start date format if provided
+    if start_date:
+        is_valid, error_message = validate_date_with_range_check(start_date)
+        if not is_valid:
+            console.print(f"❌ {error_message}", style="red")
+            sys.exit(1)
+
+    # Validate max_videos
+    if max_videos is not None and max_videos <= 0:
+        console.print("❌ max-videos must be a positive integer", style="red")
+        sys.exit(1)
+
+    try:
+        # Initialize YouTube channel handler
+        channel_handler = YouTubeUserHandler(whisper_model)
+
+        console.print(
+            "🎯 Starting YouTube channel processing...", style="bold cyan"
+        )
+        if start_date:
+            console.print(
+                f"📅 Date filter: videos from {start_date}", style="dim"
+            )
+        if max_videos:
+            console.print(f"🔢 Video limit: {max_videos} videos", style="dim")
+
+        # Process channel
+        result = asyncio.run(
+            channel_handler.process_channel(
+                channel_input=channel_input,
+                output_dir=output_dir,
+                start_date=start_date,
+                max_videos=max_videos,
+            )
+        )
+
+        if result.get("success", False):
+            show_youtube_channel_results(result, verbose)
+        else:
+            console.print(
+                f"❌ Channel processing failed: {result.get('error', 'Unknown error')}",
+                style="red",
+            )
+            sys.exit(1)
+
+    except KeyboardInterrupt:
+        console.print("\n⚠️ Operation interrupted by user", style="yellow")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"❌ Channel processing failed: {e}", style="red")
+        if verbose:
+            import traceback
+
+            console.print(traceback.format_exc(), style="dim")
+        sys.exit(1)
+
+
+def show_youtube_channel_results(result: dict, verbose: bool):
+    """Show YouTube channel processing results."""
+    console.print(
+        "\n🎉 YouTube channel processing completed!", style="bold green"
+    )
+
+    # Create results table
+    table = Table(show_header=False, box=None)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="white")
+
+    channel_info = result.get("channel_info", {})
+    run_stats = result.get("run_stats", {})
+
+    table.add_row("Channel", channel_info.get("display_name", "unknown"))
+    table.add_row("Total Videos", str(result.get("total_videos", 0)))
+    table.add_row(
+        "Attempted This Run", str(run_stats.get("attempted_this_run", 0))
+    )
+    table.add_row(
+        "Successful This Run", str(run_stats.get("successful_this_run", 0))
+    )
+    table.add_row("Failed This Run", str(run_stats.get("failed_this_run", 0)))
+    table.add_row(
+        "Skipped This Run", str(run_stats.get("skipped_this_run", 0))
+    )
+    table.add_row("Total Completed", str(run_stats.get("total_completed", 0)))
+    table.add_row("Output Directory", result.get("output_dir", ""))
+
+    console.print(table)
+
+    # Show sample results if available
+    results = result.get("results", [])
+    successful_results = [r for r in results if r.get("success", False)]
+
+    if successful_results and verbose:
+        console.print("\n📋 Recent successful transcripts:", style="bold")
+        for i, res in enumerate(successful_results[:5]):
+            video_info = res.get("video_info", {})
+            title = video_info.get("title", "Unknown title")[:50]
+            console.print(f"  {i+1}. {title}...", style="green")
+
+        if len(successful_results) > 5:
+            console.print(
+                f"  ... and {len(successful_results) - 5} more videos",
+                style="dim",
+            )
 
     if verbose:
         console.print("\n📋 Processing completed successfully", style="dim")
