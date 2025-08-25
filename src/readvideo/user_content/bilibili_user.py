@@ -19,15 +19,19 @@ class BilibiliUserHandler:
     """Handler for processing all videos from a Bilibili user."""
 
     def __init__(
-        self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"
+        self, 
+        whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin",
+        proxy: Optional[str] = None
     ):
         """Initialize user handler.
 
         Args:
             whisper_model_path: Path to whisper model for transcription
+            proxy: Proxy URL for network requests
         """
         self.whisper_model_path = whisper_model_path
-        self.bilibili_handler = BilibiliHandler(whisper_model_path)
+        self.proxy = proxy
+        self.bilibili_handler = BilibiliHandler(whisper_model_path, proxy=proxy)
 
     def extract_uid(self, user_input: str) -> int:
         """Extract UID from URL or direct UID input.

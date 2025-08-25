@@ -141,15 +141,19 @@ class BilibiliHandler:
     """Handler for processing Bilibili videos."""
 
     def __init__(
-        self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"
+        self, 
+        whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin",
+        proxy: Optional[str] = None
     ):
         """Initialize Bilibili handler.
 
         Args:
             whisper_model_path: Path to whisper model for transcription
+            proxy: Proxy URL for BBDown and yt-dlp
         """
         self.audio_processor = AudioProcessor()
         self.whisper_wrapper = WhisperWrapper(whisper_model_path)
+        self.proxy = proxy
         self.verify_bbdown()
         self._ytdlp_available = self._check_ytdlp_availability()
 
@@ -421,6 +425,11 @@ class BilibiliHandler:
                 "noplaylist": True,
             }
 
+            # Add proxy support if configured
+            if self.proxy:
+                ydl_opts["proxy"] = self.proxy
+                logger.debug(f"Using proxy for yt-dlp: {self.proxy}")
+
             # Add Chrome cookies support by default
             ydl_opts["cookiesfrombrowser"] = ("chrome",)
             logger.info("🍪 Using cookies from Chrome browser")
@@ -509,6 +518,10 @@ class BilibiliHandler:
         try:
             # Build BBDown command (BBDown uses system cookies automatically)
             cmd = ["BBDown", "--audio-only", url]
+            
+            # Note: BBDown doesn't have direct proxy support via command line
+            # For proxy usage, users need to configure system-level proxy
+            # or use tools like proxychains
 
             # Set temporary directory as working directory
             original_dir = os.getcwd()

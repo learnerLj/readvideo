@@ -78,9 +78,6 @@ def detect_input_type(input_str: str) -> str:
     help="Path to Whisper model file",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-@click.option(
-    "--proxy", help="HTTP proxy address (e.g., http://127.0.0.1:8080)"
-)
 def main(
     input_source: str,
     auto_detect: bool,
@@ -89,7 +86,7 @@ def main(
     info_only: bool,
     whisper_model: str,
     verbose: bool,
-    proxy: Optional[str],
+    proxy: Optional[str] = None,
 ):
     """ReadVideo - Video and Audio Transcription Tool
 
@@ -307,9 +304,16 @@ def info():
 
 # Create CLI group for multiple commands
 @click.group()
-def cli():
+@click.option(
+    "--proxy", 
+    help="HTTP proxy address (e.g., http://127.0.0.1:8080)"
+)
+@click.pass_context
+def cli(ctx, proxy):
     """ReadVideo - Video and Audio Transcription Tool"""
-    pass
+    # Store proxy in context for subcommands to access
+    ctx.ensure_object(dict)
+    ctx.obj['proxy'] = proxy
 
 
 # Add single video processing as 'process' command
@@ -340,10 +344,9 @@ def cli():
     help="Path to Whisper model file",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-@click.option(
-    "--proxy", help="HTTP proxy address (e.g., http://127.0.0.1:8080)"
-)
+@click.pass_context
 def process_single(
+    ctx,
     input_source,
     auto_detect,
     output_dir,
@@ -351,34 +354,22 @@ def process_single(
     info_only,
     whisper_model,
     verbose,
-    proxy,
 ):
     """Process single video, audio file or URL."""
-    # Call main function directly with correct arguments
-    import sys
-
-    # Save original argv and replace it temporarily
-    original_argv = sys.argv
-    sys.argv = [
-        "readvideo",
-        input_source,
-        *(["--auto-detect"] if auto_detect else []),
-        *(["-o", output_dir] if output_dir else []),
-        *(["--no-cleanup"] if no_cleanup else []),
-        *(["--info-only"] if info_only else []),
-        *(
-            ["--whisper-model", whisper_model]
-            if whisper_model != "~/.whisper-models/ggml-large-v3.bin"
-            else []
-        ),
-        *(["-v"] if verbose else []),
-        *(["--proxy", proxy] if proxy else []),
-    ]
-
-    try:
-        main()
-    finally:
-        sys.argv = original_argv
+    # Get proxy from global context
+    proxy = ctx.obj.get('proxy') if ctx.obj else None
+    
+    # Call main function directly with arguments
+    main(
+        input_source=input_source,
+        auto_detect=auto_detect,
+        output_dir=output_dir,
+        no_cleanup=no_cleanup,
+        info_only=info_only,
+        whisper_model=whisper_model,
+        verbose=verbose,
+        proxy=proxy,
+    )
 
 
 # Add user processing command
@@ -406,8 +397,9 @@ def process_single(
     help="Path to Whisper model file",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+@click.pass_context
 def user_command(
-    user_input, output_dir, start_date, max_videos, whisper_model, verbose
+    ctx, user_input, output_dir, start_date, max_videos, whisper_model, verbose
 ):
     """Process all videos from a Bilibili user.
 
@@ -440,8 +432,11 @@ def user_command(
         sys.exit(1)
 
     try:
+        # Get proxy from global context
+        proxy = ctx.obj.get('proxy') if ctx.obj else None
+        
         # Initialize user handler
-        user_handler = BilibiliUserHandler(whisper_model)
+        user_handler = BilibiliUserHandler(whisper_model, proxy=proxy)
 
         console.print("🎯 Starting user processing...", style="bold cyan")
         if start_date:
@@ -599,7 +594,9 @@ def show_user_results(result: dict, verbose: bool):
     help="Nitter instance URL (default: http://10.144.0.3:8080)",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+@click.pass_context
 def twitter_command(
+    ctx,
     username,
     output_dir,
     start_date,
@@ -734,11 +731,8 @@ def show_twitter_results(result: dict, verbose: bool):
     type=click.Path(),
     help="Output directory (required for channel processing)",
 )
-@click.option(
-    "--start-date",
-    help="Start date for video filtering (YYYY-MM-DD format, e.g., 2024-01-15). "
-    "Videos published on or after this date will be included.",
-)
+# Note: Date filtering removed due to YouTube API limitations
+# Use --max-videos to limit the number of videos processed
 @click.option(
     "--max-videos",
     type=int,
@@ -750,8 +744,9 @@ def show_twitter_results(result: dict, verbose: bool):
     help="Path to whisper model file for transcription",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+@click.pass_context
 def youtube_channel_command(
-    channel_input, output_dir, start_date, max_videos, whisper_model, verbose
+    ctx, channel_input, output_dir, max_videos, whisper_model, verbose
 ):
     """Process all videos from a YouTube channel.
 
@@ -760,23 +755,16 @@ def youtube_channel_command(
     Examples:
       readvideo youtube-channel @PewDiePie --output-dir ./channel_analysis
       readvideo youtube-channel https://www.youtube.com/@username -o ./output
-      readvideo youtube-channel @username -o ./output --start-date 2024-01-15 --max-videos 50
+      readvideo youtube-channel @username -o ./output --max-videos 50
 
-    Date filtering:
-      --start-date 2024-01-01  # Include videos from Jan 1, 2024 onwards
-      --start-date 2023-12-25  # Include videos from Dec 25, 2023 onwards
-
-    Note: Date must be in YYYY-MM-DD format.
+    Video limiting:
+      --max-videos 10   # Process only the first 10 videos
+      --max-videos 100  # Process only the first 100 videos
     """
     if not verbose:
         print_banner()
 
-    # Validate start date format if provided
-    if start_date:
-        is_valid, error_message = validate_date_with_range_check(start_date)
-        if not is_valid:
-            console.print(f"❌ {error_message}", style="red")
-            sys.exit(1)
+    # Note: Date filtering removed due to YouTube limitations
 
     # Validate max_videos
     if max_videos is not None and max_videos <= 0:
@@ -784,16 +772,15 @@ def youtube_channel_command(
         sys.exit(1)
 
     try:
+        # Get proxy from global context
+        proxy = ctx.obj.get('proxy') if ctx.obj else None
+        
         # Initialize YouTube channel handler
-        channel_handler = YouTubeUserHandler(whisper_model)
+        channel_handler = YouTubeUserHandler(whisper_model, proxy=proxy)
 
         console.print(
             "🎯 Starting YouTube channel processing...", style="bold cyan"
         )
-        if start_date:
-            console.print(
-                f"📅 Date filter: videos from {start_date}", style="dim"
-            )
         if max_videos:
             console.print(f"🔢 Video limit: {max_videos} videos", style="dim")
 
@@ -802,7 +789,7 @@ def youtube_channel_command(
             channel_handler.process_channel(
                 channel_input=channel_input,
                 output_dir=output_dir,
-                start_date=start_date,
+                start_date=None,  # Date filtering removed
                 max_videos=max_videos,
             )
         )

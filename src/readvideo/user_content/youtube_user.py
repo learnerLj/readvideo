@@ -19,15 +19,19 @@ class YouTubeUserHandler:
     """Handler for processing all videos from a YouTube channel."""
 
     def __init__(
-        self, whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin"
+        self, 
+        whisper_model_path: str = "~/.whisper-models/ggml-large-v3.bin",
+        proxy: Optional[str] = None
     ):
         """Initialize user handler.
 
         Args:
             whisper_model_path: Path to whisper model for transcription
+            proxy: Proxy URL for network requests
         """
         self.whisper_model_path = whisper_model_path
-        self.youtube_handler = YouTubeHandler(whisper_model_path)
+        self.proxy = proxy
+        self.youtube_handler = YouTubeHandler(whisper_model_path, proxy=proxy)
 
     def extract_channel_info(self, channel_input: str) -> Dict[str, str]:
         """Extract channel information from URL or username input.
@@ -128,11 +132,12 @@ class YouTubeUserHandler:
                 "%(id)s|%(title)s|%(upload_date)s",
             ]
 
-            # Add date filter if specified
-            if start_date:
-                # Convert YYYY-MM-DD to YYYYMMDD for yt-dlp
-                date_filter = start_date.replace("-", "")
-                cmd.extend(["--dateafter", date_filter])
+            # Note: Date filtering via yt-dlp is unreliable due to YouTube limitations
+            # We'll rely on max_videos parameter for limiting instead
+
+            # Add proxy if configured
+            if self.proxy:
+                cmd.extend(["--proxy", self.proxy])
 
             cmd.append(channel_url)
 

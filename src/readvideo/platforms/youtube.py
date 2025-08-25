@@ -12,6 +12,8 @@ from ..core.audio_processor import AudioProcessingError, AudioProcessor
 from ..core.transcript_fetcher import (TranscriptFetchError,
                                        YouTubeTranscriptFetcher,
                                        is_youtube_url)
+from ..core.supadata_fetcher import (SupadataFetchError, 
+                                     SupadataTranscriptFetcher)
 from ..core.whisper_wrapper import WhisperWrapper
 
 console = Console()
@@ -31,18 +33,21 @@ class YouTubeHandler:
         Args:
             whisper_model_path: Path to whisper model for fallback transcription
             prefer_cookies: Whether to use browser cookies for yt-dlp video download
-            proxy: Proxy URL for transcript API
+            proxy: Proxy URL for both transcript API and yt-dlp
         """
         # Setup proxy configuration
         proxies = None
         if proxy:
             proxies = {"http": proxy, "https": proxy}
 
-        # Note: No cookies for transcript API to avoid account ban risk
+        # Setup transcript fetchers with Supadata as primary
+        self.supadata_fetcher = SupadataTranscriptFetcher()
+        # Note: No cookies for transcript API to avoid account ban risk  
         self.transcript_fetcher = YouTubeTranscriptFetcher(proxies=proxies)
         self.audio_processor = AudioProcessor()
         self.whisper_wrapper = WhisperWrapper(whisper_model_path)
         self.prefer_cookies = prefer_cookies  # Only for yt-dlp downloads
+        self.proxy = proxy  # Store proxy for yt-dlp usage
 
     def validate_url(self, url: str) -> bool:
         """Validate that URL is a YouTube URL.
@@ -111,21 +116,44 @@ class YouTubeHandler:
         # Define language preference
         languages = ["zh", "zh-Hans", "zh-Hant", "en"]
 
-        # Fetch transcript
-        transcript_data = self.transcript_fetcher.fetch_transcript_from_url(
-            url, languages=languages, prefer_manual=True
-        )
+        # Try Supadata API first, fallback to youtube-transcript-api
+        transcript_data = None
+        transcript_source = None
+        
+        try:
+            console.print("🚀 Trying Supadata API first...", style="cyan")
+            transcript_data = self.supadata_fetcher.fetch_transcript_from_url(url)
+            transcript_source = "supadata"
+        except SupadataFetchError as e:
+            console.print(f"⚠️ Supadata failed: {e}", style="yellow")
+            console.print("🔄 Falling back to youtube-transcript-api...", style="cyan")
+            try:
+                transcript_data = self.transcript_fetcher.fetch_transcript_from_url(
+                    url, languages=languages, prefer_manual=True
+                )
+                transcript_source = "youtube-transcript-api"
+            except TranscriptFetchError as fallback_error:
+                console.print(f"❌ Both transcript methods failed. Supadata: {e}, YouTube API: {fallback_error}", style="red")
+                raise TranscriptFetchError(f"All transcript methods failed. Last error: {fallback_error}")
 
-        # Generate output filename
-        video_id = self.transcript_fetcher.extract_video_id(url)
-        output_file = os.path.join(output_dir, f"{video_id}.txt")
+        # Generate output filename with title
+        video_id = transcript_data.get("video_id") or self.transcript_fetcher.extract_video_id(url)
+        
+        # Get video title from transcript data or use yt-dlp to get it
+        video_title = self._get_video_title(url, video_id)
+        safe_title = self._sanitize_filename(video_title)
+        output_file = os.path.join(output_dir, f"{safe_title} [{video_id}].txt")
 
-        # Save transcript
-        self.transcript_fetcher.save_transcript(transcript_data, output_file)
+        # Save transcript using appropriate fetcher
+        if transcript_source == "supadata":
+            self.supadata_fetcher.save_transcript(transcript_data, output_file)
+        else:
+            self.transcript_fetcher.save_transcript(transcript_data, output_file)
 
         return {
             "success": True,
             "method": "transcript",
+            "transcript_source": transcript_source,
             "platform": "youtube",
             "url": url,
             "video_id": video_id,
@@ -175,9 +203,11 @@ class YouTubeHandler:
                 output_dir=output_dir,
             )
 
-            # Extract video ID for naming
+            # Extract video ID and title for naming
             video_id = self.transcript_fetcher.extract_video_id(url)
-            final_output = os.path.join(output_dir, f"{video_id}.txt")
+            video_title = self._get_video_title(url, video_id)
+            safe_title = self._sanitize_filename(video_title)
+            final_output = os.path.join(output_dir, f"{safe_title} [{video_id}].txt")
 
             # Copy transcription to final location
             if (
@@ -229,9 +259,14 @@ class YouTubeHandler:
                 "--progress",  # Show progress even with other options
             ]
 
-            # Add cookies if available and preferred
-            if self.prefer_cookies:
-                cmd.extend(["--cookies-from-browser", "chrome"])
+            # Note: Removed cookies usage for security reasons
+            # Cookies can lead to account bans and are not recommended
+            # if self.prefer_cookies:
+            #     cmd.extend(["--cookies-from-browser", "chrome"])
+            
+            # Add proxy if configured
+            if self.proxy:
+                cmd.extend(["--proxy", self.proxy])
 
             # Set output directory
             original_dir = os.getcwd()
@@ -328,3 +363,74 @@ class YouTubeHandler:
                     "translatable": [],
                 },
             }
+
+    def _get_video_title(self, url: str, video_id: str) -> str:
+        """Get video title using yt-dlp.
+        
+        Args:
+            url: YouTube video URL
+            video_id: Video ID
+            
+        Returns:
+            Video title or video_id if title cannot be retrieved
+        """
+        try:
+            import subprocess
+            import json
+            
+            cmd = ["yt-dlp", "--dump-json", "--no-download"]
+            
+            # Add proxy if configured
+            if self.proxy:
+                cmd.extend(["--proxy", self.proxy])
+            
+            cmd.append(url)
+            
+            result = subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                info = json.loads(result.stdout)
+                return info.get("title", video_id)
+            else:
+                console.print(f"⚠️ Could not get title for {video_id}", style="yellow")
+                return video_id
+                
+        except Exception as e:
+            console.print(f"⚠️ Error getting title for {video_id}: {e}", style="yellow")
+            return video_id
+
+    def _sanitize_filename(self, filename: str, max_length: int = 100) -> str:
+        """Sanitize filename to be safe for filesystem.
+        
+        Args:
+            filename: Original filename
+            max_length: Maximum length for filename
+            
+        Returns:
+            Sanitized filename
+        """
+        import re
+        
+        # Replace problematic characters
+        safe_name = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        
+        # Remove control characters
+        safe_name = re.sub(r'[\x00-\x1f\x7f]', '', safe_name)
+        
+        # Trim whitespace and dots
+        safe_name = safe_name.strip(' .')
+        
+        # Truncate if too long
+        if len(safe_name) > max_length:
+            safe_name = safe_name[:max_length].rstrip(' .')
+        
+        # Ensure not empty
+        if not safe_name:
+            safe_name = "untitled"
+            
+        return safe_name
