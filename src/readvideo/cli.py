@@ -86,7 +86,6 @@ def main(
     info_only: bool,
     whisper_model: str,
     verbose: bool,
-    proxy: Optional[str] = None,
 ):
     """ReadVideo - Video and Audio Transcription Tool
 
@@ -98,6 +97,29 @@ def main(
       readvideo ~/Music/podcast.mp3
       readvideo ~/Videos/lecture.mp4
     """
+    _process_input(
+        input_source=input_source,
+        auto_detect=auto_detect,
+        output_dir=output_dir,
+        no_cleanup=no_cleanup,
+        info_only=info_only,
+        whisper_model=whisper_model,
+        verbose=verbose,
+        proxy=None,
+    )
+
+
+def _process_input(
+    input_source: str,
+    auto_detect: bool,
+    output_dir: Optional[str],
+    no_cleanup: bool,
+    info_only: bool,
+    whisper_model: str,
+    verbose: bool,
+    proxy: Optional[str] = None,
+):
+    """Core processing logic extracted from main()"""
     if not verbose:
         print_banner()
 
@@ -359,8 +381,8 @@ def process_single(
     # Get proxy from global context
     proxy = ctx.obj.get('proxy') if ctx.obj else None
     
-    # Call main function directly with arguments
-    main(
+    # Call the core processing function directly
+    _process_input(
         input_source=input_source,
         auto_detect=auto_detect,
         output_dir=output_dir,
