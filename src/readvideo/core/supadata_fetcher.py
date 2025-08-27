@@ -144,10 +144,14 @@ class SupadataTranscriptFetcher:
                     
                     video_id = self.extract_video_id(url)
                     
+                    # Try to get title from API response (Supadata doesn't provide title)
+                    title = data.get('title', data.get('video_title', video_id))
+                    
                     result = {
                         "success": True,
                         "text": formatted_text,
                         "video_id": video_id,
+                        "title": title,  # Add title to result
                         "transcript_info": {
                             "type": "supadata_api",
                             "language": data.get("lang", "unknown"),
@@ -207,7 +211,9 @@ class SupadataTranscriptFetcher:
                 f.write(transcript_data["text"])
                 
             key_info = transcript_data.get("transcript_info", {}).get("api_key_suffix", "unknown")
-            console.print(f"✅ Transcript saved via Supadata (key: ...{key_info}): {output_file}", style="green")
+            # Escape brackets for rich display
+            display_path = output_file.replace("[", r"\[").replace("]", r"\]")
+            console.print(f"✅ Transcript saved via Supadata (key: ...{key_info}): {display_path}", style="green")
             
         except Exception as e:
             raise SupadataFetchError(f"Error saving transcript: {e}")

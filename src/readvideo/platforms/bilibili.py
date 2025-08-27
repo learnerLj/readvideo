@@ -10,90 +10,20 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
 
-from ..core.audio_processor import AudioProcessingError, AudioProcessor
-from ..core.whisper_wrapper import WhisperWrapper
+from readvideo.core.audio_processor import AudioProcessor
+from readvideo.exceptions import AudioProcessingError, ValidationError, DependencyError
+from readvideo.utils import (
+    sanitize_filename, extract_bilibili_video_id, detect_file_format,
+    managed_temp_directory, cleanup_file_list
+)
+from readvideo.core.whisper_wrapper import WhisperWrapper
 
 console = Console()
 logger = logging.getLogger(__name__)
 
 
-def detect_audio_format(file_path: str) -> Tuple[Optional[str], bool]:
-    """Detect audio format using mimetypes and file extension.
-
-    Args:
-        file_path: Path to audio file
-
-    Returns:
-        Tuple of (detected_format, is_valid_audio)
-    """
-    try:
-        if not os.path.exists(file_path):
-            return None, False
-
-        file_size = os.path.getsize(file_path)
-        if file_size < 1000:  # Less than 1KB
-            return None, False
-
-        # Check for HTML content (anti-bot protection)
-        try:
-            with open(file_path, "rb") as f:
-                header = f.read(500)  # Read first 500 bytes
-
-            if b"<html" in header.lower() or b"<!doctype" in header.lower():
-                logger.warning(
-                    f"File {file_path} contains HTML content, likely blocked"
-                )
-                return None, False
-        except Exception:
-            pass
-
-        # Use mimetypes to detect format
-        import mimetypes
-
-        mime_type, _ = mimetypes.guess_type(file_path)
-
-        # Map mime types to simple format names
-        mime_to_format = {
-            "audio/mpeg": "mp3",
-            "audio/mp3": "mp3",
-            "audio/x-mpeg": "mp3",
-            "audio/mp4": "m4a",
-            "audio/x-m4a": "m4a",
-            "audio/aac": "aac",
-            "audio/x-aac": "aac",
-            "audio/wav": "wav",
-            "audio/x-wav": "wav",
-            "audio/wave": "wav",
-            "audio/flac": "flac",
-            "audio/x-flac": "flac",
-            "audio/ogg": "ogg",
-            "audio/vorbis": "ogg",
-            "video/mp4": "m4a",  # MP4 container can contain audio
-        }
-
-        detected_format = None
-        if mime_type:
-            detected_format = mime_to_format.get(mime_type)
-
-        # Fallback: use file extension if mime type detection fails
-        if not detected_format:
-            ext = os.path.splitext(file_path)[1].lower()
-            ext_to_format = {
-                ".mp3": "mp3",
-                ".m4a": "m4a",
-                ".aac": "aac",
-                ".wav": "wav",
-                ".flac": "flac",
-                ".ogg": "ogg",
-            }
-            detected_format = ext_to_format.get(ext)
-
-        is_valid = detected_format is not None
-        return detected_format, is_valid
-
-    except Exception as e:
-        logger.warning(f"Failed to detect format for {file_path}: {e}")
-        return None, False
+# Use the common utility function from utils
+# detect_audio_format is now available as detect_file_format in utils
 
 
 def validate_audio_with_ffprobe(
@@ -215,55 +145,8 @@ class BilibiliHandler:
         Returns:
             BV ID or None if not found
         """
-        patterns = [r"/video/(BV[a-zA-Z0-9]+)", r"BV([a-zA-Z0-9]+)"]
+        return extract_bilibili_video_id(url)
 
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                bv_id = (
-                    match.group(1)
-                    if "BV" in match.group(0)
-                    else f"BV{match.group(1)}"
-                )
-                return bv_id if bv_id.startswith("BV") else f"BV{bv_id}"
-
-        return None
-
-    def sanitize_filename(self, filename: str, max_length: int = 50) -> str:
-        """Sanitize filename by removing invalid characters.
-
-        Args:
-            filename: Original filename
-            max_length: Maximum length for the filename part
-
-        Returns:
-            Sanitized filename safe for all operating systems
-        """
-        # Remove or replace invalid characters
-        # Windows reserved: < > : " | ? * \ /
-        # Also remove other problematic characters
-        invalid_chars = r'[<>:"|?*\\/]'
-        sanitized = re.sub(invalid_chars, "_", filename)
-
-        # Remove multiple consecutive underscores/spaces
-        sanitized = re.sub(r"[_\s]+", "_", sanitized)
-
-        # Remove leading/trailing underscores
-        sanitized = sanitized.strip("_")
-
-        # Truncate if too long, but try to keep word boundaries
-        if len(sanitized) > max_length:
-            truncated = sanitized[:max_length]
-            # Try to end at a word boundary
-            last_underscore = truncated.rfind("_")
-            if (
-                last_underscore > max_length * 0.7
-            ):  # If underscore is in the last 30%
-                truncated = truncated[:last_underscore]
-            sanitized = truncated.rstrip("_")
-
-        # Ensure not empty
-        return sanitized if sanitized else "video"
 
     def generate_filename(
         self, bv_id: str, video_info: Optional[Dict[str, Any]] = None
@@ -289,7 +172,7 @@ class BilibiliHandler:
         # Sanitize title
         # Reserve space for _BV号 (BV号通常12字符，加下划线共13字符)
         max_title_length = 200 - len(bv_id) - 1  # 1 for underscore
-        safe_title = self.sanitize_filename(title, max_title_length)
+        safe_title = sanitize_filename(title, max_title_length)
 
         # Build filename: 标题_BV号
         filename = f"{safe_title}_{bv_id}"
@@ -671,7 +554,7 @@ class BilibiliHandler:
                             continue
 
                         # Detect format and validate content
-                        detected_format, is_valid = detect_audio_format(
+                        detected_format, is_valid = detect_file_format(
                             file_path
                         )
 

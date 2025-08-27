@@ -7,13 +7,13 @@ from typing import Any, Dict, List, Optional
 import ffmpeg
 from rich.console import Console
 
+from readvideo.exceptions import AudioProcessingError, DependencyError
+from readvideo.utils import (
+    sanitize_filename, validate_file_path, get_file_info, 
+    processing_context, cleanup_file_list
+)
+
 console = Console()
-
-
-class AudioProcessingError(Exception):
-    """Exception raised when audio processing fails."""
-
-    pass
 
 
 class AudioProcessor:
@@ -78,25 +78,25 @@ class AudioProcessor:
         Returns:
             Dict containing file information
         """
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        path = Path(file_path)
-        extension = path.suffix.lower().lstrip(".")
-
-        file_info = {
-            "path": file_path,
-            "name": path.name,
-            "stem": path.stem,
-            "extension": extension,
-            "size": os.path.getsize(file_path),
-            "is_audio": extension in self.supported_audio_formats,
-            "is_video": extension in self.supported_video_formats,
-            "is_supported": extension
-            in (self.supported_audio_formats | self.supported_video_formats),
-        }
-
-        return file_info
+        try:
+            # Use the new utility function which includes validation
+            file_info = get_file_info(file_path)
+            
+            # Add our format-specific information
+            extension = file_info['extension']
+            file_info.update({
+                "is_audio": extension in self.supported_audio_formats,
+                "is_video": extension in self.supported_video_formats,
+                "is_supported": extension in (self.supported_audio_formats | self.supported_video_formats),
+            })
+            
+            return file_info
+        except Exception as e:
+            raise AudioProcessingError(
+                f"Failed to get file info for {file_path}",
+                file_path=file_path,
+                original_error=e
+            )
 
     def extract_audio_from_video(
         self,
@@ -162,8 +162,10 @@ class AudioProcessor:
                 )
             raise AudioProcessingError(error_msg)
         except FileNotFoundError:
-            raise AudioProcessingError(
-                "ffmpeg not found. Please install ffmpeg to extract audio from videos."
+            raise DependencyError(
+                "ffmpeg not found.",
+                dependency="ffmpeg",
+                install_command="Please install ffmpeg to extract audio from videos."
             )
 
     def convert_audio_format(
@@ -250,8 +252,10 @@ class AudioProcessor:
                 )
             raise AudioProcessingError(error_msg)
         except FileNotFoundError:
-            raise AudioProcessingError(
-                "ffmpeg not found. Please install ffmpeg to convert audio formats."
+            raise DependencyError(
+                "ffmpeg not found.",
+                dependency="ffmpeg", 
+                install_command="Please install ffmpeg to convert audio formats."
             )
 
     def process_media_file(
@@ -351,16 +355,15 @@ class AudioProcessor:
         Args:
             file_list: List of file paths to remove
         """
+        failed_paths = cleanup_file_list(file_list, ignore_errors=True)
+        
+        # Log successful cleanups
         for file_path in file_list:
-            if os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    console.print(
-                        f"🗑️ Cleaning temporary file: {os.path.basename(file_path)}",
-                        style="dim",
-                    )
-                except OSError:
-                    pass  # Ignore cleanup errors
+            if file_path not in failed_paths and not os.path.exists(file_path):
+                console.print(
+                    f"🗑️ Cleaning temporary file: {os.path.basename(file_path)}",
+                    style="dim",
+                )
 
     def get_audio_duration(self, audio_file: str) -> float:
         """Get duration of audio file in seconds using ffmpeg.
@@ -387,8 +390,10 @@ class AudioProcessor:
         except (KeyError, ValueError) as e:
             raise AudioProcessingError(f"Failed to parse audio duration: {e}")
         except FileNotFoundError:
-            raise AudioProcessingError(
-                "ffprobe not found. Please install ffmpeg package."
+            raise DependencyError(
+                "ffprobe not found.",
+                dependency="ffmpeg",
+                install_command="Please install ffmpeg package."
             )
 
     def validate_audio_for_transcription(self, audio_file: str) -> bool:

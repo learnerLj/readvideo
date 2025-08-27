@@ -10,7 +10,7 @@ import bilibili_api
 from rich.console import Console
 from rich.progress import Progress
 
-from ..platforms.bilibili import BilibiliHandler
+from readvideo.platforms.bilibili import BilibiliHandler
 
 console = Console()
 
@@ -123,7 +123,7 @@ class BilibiliUserHandler:
             end_timestamp = None
             if start_date:
                 try:
-                    from .utils import parse_date_to_timestamp_range
+                    from readvideo.user_content.utils import parse_date_to_timestamp_range
 
                     start_timestamp, end_timestamp = (
                         parse_date_to_timestamp_range(start_date)

@@ -11,19 +11,10 @@ from youtube_transcript_api import (NoTranscriptFound, TranscriptsDisabled,
                                     YouTubeTranscriptApi)
 from youtube_transcript_api.formatters import TextFormatter
 
+from readvideo.exceptions import TranscriptFetchError, RetryableTranscriptError
+from readvideo.utils import extract_youtube_video_id
+
 console = Console()
-
-
-class TranscriptFetchError(Exception):
-    """Exception raised when transcript fetching fails."""
-
-    pass
-
-
-class RetryableTranscriptError(Exception):
-    """Exception for retryable transcript errors (rate limits, network issues)."""
-
-    pass
 
 
 class YouTubeTranscriptFetcher:
@@ -87,18 +78,7 @@ class YouTubeTranscriptFetcher:
         Returns:
             Video ID or None if not found
         """
-        patterns = [
-            r"(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)"
-            r"([a-zA-Z0-9_-]{11})",
-            r"youtube\.com\/.*[?&]v=([a-zA-Z0-9_-]{11})",
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                return match.group(1)
-
-        return None
+        return extract_youtube_video_id(url)
 
     @retry(
         stop=stop_after_attempt(3),

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from rich.console import Console
 from rich.progress import Progress
 
-from ..platforms.youtube import YouTubeHandler
+from readvideo.platforms.youtube import YouTubeHandler
 
 console = Console()
 

@@ -8,13 +8,15 @@ from typing import Any, Dict, Optional
 from rich.console import Console
 from tenacity import RetryError
 
-from ..core.audio_processor import AudioProcessingError, AudioProcessor
-from ..core.transcript_fetcher import (TranscriptFetchError,
+from readvideo.core.audio_processor import AudioProcessor
+from readvideo.exceptions import AudioProcessingError
+from readvideo.utils import sanitize_filename, extract_youtube_video_id
+from readvideo.core.transcript_fetcher import (TranscriptFetchError,
                                        YouTubeTranscriptFetcher,
                                        is_youtube_url)
-from ..core.supadata_fetcher import (SupadataFetchError, 
+from readvideo.core.supadata_fetcher import (SupadataFetchError, 
                                      SupadataTranscriptFetcher)
-from ..core.whisper_wrapper import WhisperWrapper
+from readvideo.core.whisper_wrapper import WhisperWrapper
 
 console = Console()
 
@@ -137,12 +139,20 @@ class YouTubeHandler:
                 raise TranscriptFetchError(f"All transcript methods failed. Last error: {fallback_error}")
 
         # Generate output filename with title
-        video_id = transcript_data.get("video_id") or self.transcript_fetcher.extract_video_id(url)
+        video_id = transcript_data.get("video_id") or extract_youtube_video_id(url)
         
-        # Get video title from transcript data or use yt-dlp to get it
-        video_title = self._get_video_title(url, video_id)
+        # Get video title: priority is Supadata API > yt-dlp fallback
+        video_title = transcript_data.get("title")
+        if not video_title or video_title == video_id:
+            video_title = self._get_video_title(url, video_id or "unknown")
+        
         safe_title = self._sanitize_filename(video_title)
-        output_file = os.path.join(output_dir, f"{safe_title} [{video_id}].txt")
+        
+        # Use unified format: if title == video_id, use [video_id].txt format
+        if safe_title == video_id:
+            output_file = os.path.join(output_dir, f"[{video_id}].txt")
+        else:
+            output_file = os.path.join(output_dir, f"{safe_title} [{video_id}].txt")
 
         # Save transcript using appropriate fetcher
         if transcript_source == "supadata":
@@ -204,10 +214,15 @@ class YouTubeHandler:
             )
 
             # Extract video ID and title for naming
-            video_id = self.transcript_fetcher.extract_video_id(url)
+            video_id = extract_youtube_video_id(url) or "unknown"
             video_title = self._get_video_title(url, video_id)
             safe_title = self._sanitize_filename(video_title)
-            final_output = os.path.join(output_dir, f"{safe_title} [{video_id}].txt")
+            
+            # Use unified format: if title == video_id, use [video_id].txt format
+            if safe_title == video_id:
+                final_output = os.path.join(output_dir, f"[{video_id}].txt")
+            else:
+                final_output = os.path.join(output_dir, f"{safe_title} [{video_id}].txt")
 
             # Copy transcription to final location
             if (
@@ -330,7 +345,7 @@ class YouTubeHandler:
         if not self.validate_url(url):
             raise ValueError(f"Invalid YouTube URL: {url}")
 
-        video_id = self.transcript_fetcher.extract_video_id(url)
+        video_id = extract_youtube_video_id(url)
         if not video_id:
             raise ValueError(f"Could not extract video ID from URL: {url}")
 
@@ -384,8 +399,30 @@ class YouTubeHandler:
             if self.proxy:
                 cmd.extend(["--proxy", self.proxy])
             
-            cmd.append(url)
+            # Try using browser cookies to bypass YouTube restrictions
+            try:
+                # First try with Chrome cookies
+                cmd_with_cookies = cmd + ["--cookies-from-browser", "chrome", url]
+                result = subprocess.run(
+                    cmd_with_cookies, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=15
+                )
+                
+                if result.returncode == 0:
+                    info = json.loads(result.stdout)
+                    title = info.get("title", video_id)
+                    if title != video_id:
+                        console.print(f"✅ Got title via cookies: {title}", style="green")
+                        return title
+                    
+            except Exception:
+                # If cookies fail, try without cookies
+                pass
             
+            # Fallback: try without cookies
+            cmd.append(url)
             result = subprocess.run(
                 cmd, 
                 capture_output=True, 
@@ -414,23 +451,4 @@ class YouTubeHandler:
         Returns:
             Sanitized filename
         """
-        import re
-        
-        # Replace problematic characters
-        safe_name = re.sub(r'[<>:"/\\|?*]', '_', filename)
-        
-        # Remove control characters
-        safe_name = re.sub(r'[\x00-\x1f\x7f]', '', safe_name)
-        
-        # Trim whitespace and dots
-        safe_name = safe_name.strip(' .')
-        
-        # Truncate if too long
-        if len(safe_name) > max_length:
-            safe_name = safe_name[:max_length].rstrip(' .')
-        
-        # Ensure not empty
-        if not safe_name:
-            safe_name = "untitled"
-            
-        return safe_name
+        return sanitize_filename(filename, max_length)

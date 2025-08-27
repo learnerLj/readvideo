@@ -3,7 +3,7 @@
 This allows the package to be executed with: python -m readvideo
 """
 
-from .cli import cli
+from readvideo.cli import cli
 
 if __name__ == "__main__":
     cli()

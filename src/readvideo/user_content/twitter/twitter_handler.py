@@ -6,8 +6,8 @@ from typing import Dict, Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from .rss_fetcher import RSSFetcher
-from .utils import (filter_tweets_by_content_type, filter_tweets_by_date,
+from readvideo.user_content.twitter.rss_fetcher import RSSFetcher
+from readvideo.user_content.twitter.utils import (filter_tweets_by_content_type, filter_tweets_by_date,
                     save_tweets_to_json, save_tweets_to_markdown)
 
 console = Console()

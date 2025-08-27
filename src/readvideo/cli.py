@@ -9,14 +9,14 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from .core.transcript_fetcher import is_youtube_url
-from .platforms.bilibili import BilibiliHandler
-from .platforms.local import LocalMediaHandler
-from .platforms.youtube import YouTubeHandler
-from .user_content.bilibili_user import BilibiliUserHandler
-from .user_content.twitter import TwitterHandler
-from .user_content.utils import validate_date_with_range_check
-from .user_content.youtube_user import YouTubeUserHandler
+from readvideo.utils import is_youtube_url, is_bilibili_url
+from readvideo.platforms.bilibili import BilibiliHandler
+from readvideo.platforms.local import LocalMediaHandler
+from readvideo.platforms.youtube import YouTubeHandler
+from readvideo.user_content.bilibili_user import BilibiliUserHandler
+from readvideo.user_content.twitter import TwitterHandler
+from readvideo.user_content.utils import validate_date_with_range_check
+from readvideo.user_content.youtube_user import YouTubeUserHandler
 
 console = Console()
 
@@ -45,7 +45,7 @@ def detect_input_type(input_str: str) -> str:
     """
     if is_youtube_url(input_str):
         return "youtube"
-    elif "bilibili.com" in input_str or "b23.tv" in input_str:
+    elif is_bilibili_url(input_str):
         return "bilibili"
     else:
         return "local"
@@ -259,7 +259,9 @@ def show_results(result: dict, verbose: bool):
             else "Audio Transcription"
         ),
     )
-    table.add_row("Output File", result.get("output_file", ""))
+    # Escape brackets for rich display
+    output_file_display = result.get("output_file", "").replace("[", r"\[").replace("]", r"\]")
+    table.add_row("Output File", output_file_display)
 
     if result.get("method") == "transcript":
         transcript_info = result.get("transcript_info", {})

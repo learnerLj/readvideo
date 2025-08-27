@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 
-from ..core.audio_processor import AudioProcessingError, AudioProcessor
-from ..core.whisper_wrapper import WhisperWrapper
+from readvideo.core.audio_processor import AudioProcessingError, AudioProcessor
+from readvideo.core.whisper_wrapper import WhisperWrapper
 
 console = Console()
 

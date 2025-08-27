@@ -386,6 +386,6 @@ class RSSFetcher:
             Tweet ID or None if not found
         """
         # Import here to avoid circular imports
-        from .utils import extract_tweet_id
+        from readvideo.user_content.twitter.utils import extract_tweet_id
 
         return extract_tweet_id(nitter_url)
