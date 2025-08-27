@@ -279,10 +279,14 @@ class PlatformHandler:
 
 ### Exception Hierarchy
 ```python
-AudioProcessingError(Exception)  # Audio conversion failures
-TranscriptError(Exception)       # Subtitle/transcript failures  
-PlatformError(Exception)         # Platform-specific errors
-ValidationError(Exception)       # Input validation errors
+ReadVideoError(Exception)           # Base exception with error codes
+├── ValidationError(ReadVideoError)  # Input validation failures
+├── NetworkError(ReadVideoError)     # Network-related failures  
+├── ProcessingError(ReadVideoError)  # Processing failures (audio, transcription)
+└── Backward compatibility aliases:
+    ├── AudioProcessingError = ProcessingError
+    ├── TranscriptFetchError = NetworkError
+    └── Others...
 ```
 
 ---

@@ -561,23 +561,42 @@ def process_channel(self, channel_input: str, output_dir: str,
 
 ### Exception Hierarchy
 
-#### AudioProcessingError
+#### ReadVideoError (Base Class)
 ```python
-class AudioProcessingError(Exception):
-    """Raised when audio processing operations fail"""
+class ReadVideoError(Exception):
+    """Base exception with error codes and context"""
+    def __init__(self, message: str, error_code: str = "RV_ERROR", context: Optional[dict] = None)
 ```
 
-**Common Causes**:
-- FFmpeg not available
-- Unsupported audio format
-- File corruption or access issues
-- Insufficient disk space
-
-#### TranscriptError  
+#### ValidationError  
 ```python
-class TranscriptError(Exception):
-    """Raised when transcript/subtitle operations fail"""
+class ValidationError(ReadVideoError):
+    """Exception for validation failures (URLs, file paths, etc)"""
 ```
+**Common Causes**: Invalid URLs, file paths, input validation failures
+
+#### NetworkError
+```python  
+class NetworkError(ReadVideoError):
+    """Exception for network-related failures"""
+```
+**Common Causes**: API failures, connection issues, IP blocking
+
+#### ProcessingError
+```python
+class ProcessingError(ReadVideoError): 
+    """Exception for processing failures (transcription, audio, etc)"""
+```
+**Common Causes**: Audio conversion failures, transcription errors, missing dependencies
+
+#### Backward Compatibility Aliases
+- `AudioProcessingError = ProcessingError`
+- `TranscriptFetchError = NetworkError` 
+- `SupadataFetchError = NetworkError`
+- `DependencyError = ProcessingError`
+- `ConfigurationError = ValidationError`
+- `ResourceError = ProcessingError`
+- `RetryableTranscriptError = NetworkError`
 
 **Common Causes**:
 - YouTube transcript API limitations
