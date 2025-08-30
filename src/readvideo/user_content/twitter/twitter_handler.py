@@ -16,7 +16,7 @@ console = Console()
 class TwitterHandler:
     """Handler for fetching Twitter content via RSS."""
 
-    def __init__(self, nitter_url: str = "http://10.144.0.3:8080"):
+    def __init__(self, nitter_url: str = "http://10.144.0.3:42853"):
         """Initialize TwitterHandler.
 
         Args:

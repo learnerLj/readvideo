@@ -255,7 +255,7 @@ def replace_localhost_links(text: str) -> str:
             return f"https://twitter.com/{username_in_link}/status/{tweet_id_in_link}"
         return nitter_url
 
-    return re.sub(r"localhost:8080/\w+/status/\d+(?:#m)?", replace_match, text)
+    return re.sub(r"localhost:42853/\w+/status/\d+(?:#m)?", replace_match, text)
 
 
 def clean_tweet_content(content: str) -> str:

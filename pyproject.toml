@@ -1,6 +1,6 @@
 [project]
 name = "readvideo"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Python tool for downloading and transcribing videos from YouTube/Bilibili and local media files"
 readme = "README.md"
 authors = [

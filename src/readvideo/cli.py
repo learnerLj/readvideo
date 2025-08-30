@@ -614,8 +614,8 @@ def show_user_results(result: dict, verbose: bool):
 )
 @click.option(
     "--nitter-url",
-    default="http://10.144.0.3:8080",
-    help="Nitter instance URL (default: http://10.144.0.3:8080)",
+    default="http://10.144.0.3:42853",
+    help="Nitter instance URL (default: http://10.144.0.3:42853)",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.pass_context

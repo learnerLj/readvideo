@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class RSSFetcher:
     """RSS API client with pagination support."""
 
-    def __init__(self, nitter_url: str = "http://10.144.0.3:8080"):
+    def __init__(self, nitter_url: str = "http://10.144.0.3:42853"):
         """Initialize RSS fetcher.
 
         Args:
