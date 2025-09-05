@@ -554,9 +554,8 @@ class BilibiliHandler:
                             continue
 
                         # Detect format and validate content
-                        detected_format, is_valid = detect_file_format(
-                            file_path
-                        )
+                        detected_format = detect_file_format(file_path)
+                        is_valid = detected_format != "unknown"
 
                         candidate = {
                             "path": file_path,
